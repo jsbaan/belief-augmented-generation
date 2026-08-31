@@ -288,28 +288,88 @@
 
   .hidden { display: none !important; }
   .separator { border-top: 1px solid #e8e8e8; margin: 12px 0; }
+
+  /* ── Intro banner ── */
+  #intro {
+    position: relative;
+    max-width: 960px;
+    margin: 24px auto 0;
+    padding: 16px 44px 16px 20px;
+    background: #eef4fb;
+    border: 1px solid #cfe0f2;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: #1f3b5c;
+  }
+  #intro p { margin: 0 0 6px 0; }
+  #intro p:last-child { margin-bottom: 0; }
+  #intro a { color: #1d4ed8; text-decoration: none; }
+  #intro a:hover { text-decoration: underline; }
+  #intro-close {
+    position: absolute; top: 8px; right: 10px;
+    background: none; border: none; cursor: pointer;
+    font-size: 18px; line-height: 1; color: #6b7c94;
+    padding: 4px 8px; border-radius: 4px;
+  }
+  #intro-close:hover { background: rgba(0,0,0,0.05); color: #1f3b5c; }
+  #intro-show {
+    display: block; max-width: 960px; margin: 12px auto 0;
+    padding: 6px 20px 0; font-size: 11px; color: #6b7c94;
+  }
+  #intro-show a { color: #4a90d9; cursor: pointer; text-decoration: none; }
+  #intro-show a:hover { text-decoration: underline; }
+
+  /* ── Parsed reasoner-output block ── */
+  .parsed-block {
+    background: #f7f9fc;
+    border: 1px solid #e5eaf2;
+    border-left: 3px solid #4a90d9;
+    border-radius: 4px;
+    padding: 10px 14px;
+  }
+  .parsed-block .reasoning-text { margin: 0; padding: 4px 0; }
+  .parsed-block .reasoning-text + .reasoning-text {
+    border-top: 1px dashed #e5eaf2;
+    margin-top: 4px;
+    padding-top: 8px;
+  }
 </style>
 </head>
 <body>
+
+<!-- ── Intro banner ── -->
+<div id="intro">
+  <button id="intro-close" title="Hide this banner">×</button>
+  <p>Interactive demo for the paper <em>Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</em> (INLG 2026).
+  Each record shows one <strong>question</strong> and its <strong>references</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a>, the assistant LLM's
+  <strong>belief state</strong> (K sampled candidate answers) and the output of belief-augmented generation (<strong>BAG's output</strong>: K
+  strategy: direct / clarify / abstain; reasoning; response), the potentially multi-turn <strong>conversation</strong> with a simulated user, reference-based LLM-judge verdicts, and <strong>baselines</strong>.</p>
+
+    <p>Pick an assistant <strong>model</strong> and augmentation <strong>method</strong>: SAG is a prompt-only method, BAG1-3 exploit the belief state with slightly different instructions. You can also pick a <strong>brevity</strong>-inducing prompt to shorten generations, and apply SAG+ or BAG+ in <strong>Turn 4 </strong> after clarification.
+  &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
+  &middot; <a href="https://huggingface.co/datasets/jsbaan/bag-paper-data">Data</a></p>
+</div>
+<div id="intro-show" class="hidden"><a>Show intro</a></div>
 
 <!-- ── Top bar ── -->
 <div id="topbar">
   <h1>BAG Pipeline Visualizer</h1>
 
-  <div class="cfg-group">
+  <div class="cfg-group" title="Assistant model that generates answers and picks a strategy">
     <label>Model</label>
     <select id="sel-model">
+      <option>qwen3-14b</option>
       <option>olmo2-13b-instruct</option>
       <option>olmo2-7b-instruct</option>
       <option>olmo3-7b-instruct</option>
       <option>qwen3-8b</option>
-      <option>qwen3-14b</option>
       <option>gemini-2.5-flash</option>
     </select>
   </div>
 
-  <div class="cfg-group">
-    <label>Direct prompt</label>
+  <div class="cfg-group" title="Brevity instruction for the direct answer step (free = no instruction, concise = 'be concise', sentence = 'answer in one sentence')">
+    <label>Brevity</label>
     <select id="sel-dp">
       <option value="vanilla">free</option>
       <option value="concise">concise</option>
@@ -317,8 +377,8 @@
     </select>
   </div>
 
-  <div class="cfg-group">
-    <label>Reasoner</label>
+  <div class="cfg-group" title="Which method chose the strategy — SAG conditions on the question alone; BAG1/2/3 condition additionally on the K belief-state samples (three prompt variants).">
+    <label>Method</label>
     <select id="sel-rp">
       <option value="belief7">BAG3</option>
       <option value="belief6">BAG2</option>
@@ -327,7 +387,7 @@
     </select>
   </div>
 
-  <div class="cfg-group">
+  <div class="cfg-group" title="Random seed used for generation">
     <label>Seed</label>
     <select id="sel-seed">
       <option>50</option>
@@ -335,23 +395,23 @@
     </select>
   </div>
 
-  <div class="cfg-group">
+  <div class="cfg-group" title="Model that simulates the user's reply to a clarification question, conditioned on a hidden AmbigQA disambiguation">
     <label>User model</label>
     <select id="sel-um">
       <option>gemini-2.5-flash</option>
     </select>
   </div>
 
-  <div class="cfg-group">
-    <label>Final prompt</label>
+  <div class="cfg-group" title="Method used for the assistant's turn-4 answer after the clarification exchange. baseline = forced answer (no abstain). SAG+ = prompt-only, may abstain. BAG+ = re-sample K beliefs then take consensus, may abstain.">
+    <label>Turn 4</label>
     <select id="sel-fp">
-      <option value="prompt">prompt</option>
-      <option value="prompt1">prompt1</option>
-      <option value="belief">belief</option>
+      <option value="prompt">baseline</option>
+      <option value="prompt1">SAG+</option>
+      <option value="belief">BAG+</option>
     </select>
   </div>
 
-  <div class="cfg-group">
+  <div class="cfg-group" title="Reference-based LLM judge that scores each generation pass/fail against the AmbigQA references">
     <label>Judge model</label>
     <select id="sel-jm">
       <option>gemini-2.5-flash</option>
@@ -421,22 +481,23 @@
     <!-- Strategy -->
     <div class="card">
       <div class="card-header">
-        Strategy
+        BAG output
         <span id="strategy-badge"></span>
+        <button class="toggle-btn" id="raw-output-toggle" style="margin-left:auto">show raw</button>
       </div>
       <div class="card-body" id="strategy-body"></div>
     </div>
 
     <!-- Conversation -->
     <div class="card" id="conv-card">
-      <div class="card-header">Conversation + Final answer</div>
+      <div class="card-header">Full conversation with a simulated user</div>
       <div class="judge-note">Pass/fail verdicts and reasoning are from a reference-based LLM judge (gemini-2.5-flash).</div>
       <div class="card-body" id="conv-body"></div>
     </div>
 
     <!-- Baselines -->
     <div class="card">
-      <div class="card-header">Baselines</div>
+      <div class="card-header">Baselines — direct answer and oracle-disambiguated answer</div>
       <div class="judge-note">Pass/fail verdicts and reasoning are from a reference-based LLM judge (gemini-2.5-flash).</div>
       <div class="card-body" id="baselines-body"></div>
     </div>
@@ -445,6 +506,27 @@
 </div>
 
 <script>
+// ── Intro banner dismiss ──────────────────────────────────────────────────
+(function () {
+  const intro = document.getElementById('intro');
+  const show  = document.getElementById('intro-show');
+  const KEY   = 'bagViewerIntroHidden';
+  if (localStorage.getItem(KEY) === '1') {
+    intro.classList.add('hidden');
+    show.classList.remove('hidden');
+  }
+  document.getElementById('intro-close').addEventListener('click', () => {
+    intro.classList.add('hidden');
+    show.classList.remove('hidden');
+    localStorage.setItem(KEY, '1');
+  });
+  show.querySelector('a').addEventListener('click', () => {
+    intro.classList.remove('hidden');
+    show.classList.add('hidden');
+    localStorage.removeItem(KEY);
+  });
+})();
+
 // ── Paper-facing prompt names ─────────────────────────────────────────────
 // The paper uses SAG / BAG1-3 and "free"; the code and JSONL filenames use
 // prompt / belief / belief6 / belief7 and vanilla. We keep the internal names
@@ -893,6 +975,7 @@ function renderStrategy(rec) {
 
   const strategy = clarify.generations?.strategy || '';
   const reasoning = clarify.generations?.reasoning || '';
+  const response = clarify.generations?.response || '';
   const rawResponse = clarify.generations?.raw_response || '';
 
   // Badge
@@ -904,17 +987,34 @@ function renderStrategy(rec) {
 
   let html = '';
 
-  if (reasoning) {
-    html += `<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(reasoning)}</div>`;
+  const parsedBits = [];
+  if (strategy)  parsedBits.push(`<div class="reasoning-text"><strong>Strategy:</strong> ${esc(strategy)}</div>`);
+  if (reasoning) parsedBits.push(`<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(reasoning)}</div>`);
+  if (response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${esc(response)}</div>`);
+  if (parsedBits.length) {
+    html += `<div class="parsed-block">${parsedBits.join('')}</div>`;
   }
 
   if (rawResponse) {
+    const display = rawVisible ? '' : 'none';
+    html += `<div id="raw-output-wrap" style="display:${display}">`;
     html += `<div class="separator"></div>`;
+    html += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#666;margin-bottom:6px;">Raw output</div>`;
     html += `<div class="raw-response-block">${formatRawResponse(rawResponse)}</div>`;
+    html += `</div>`;
   }
 
   el.innerHTML = html;
 }
+
+// Persistent visibility state for the raw BAG output block (mirrors beliefVisible).
+let rawVisible = false;
+document.getElementById('raw-output-toggle').addEventListener('click', () => {
+  rawVisible = !rawVisible;
+  const wrap = document.getElementById('raw-output-wrap');
+  if (wrap) wrap.style.display = rawVisible ? '' : 'none';
+  document.getElementById('raw-output-toggle').textContent = rawVisible ? 'hide raw' : 'show raw';
+});
 
 // Parse raw_response and highlight CLUSTERS / INTERPRETATIONS / STRATEGY / REASONING sections
 function formatRawResponse(raw) {
@@ -945,6 +1045,12 @@ function renderConversation(rec) {
   let html = '';
 
   const strategy = clarify?.generations?.strategy || '';
+  const originalQuestion = clarify?.context?.question || rec.direct?.context?.question || '';
+
+  // Every branch starts with the original ambiguous user question.
+  if (originalQuestion) {
+    html += convTurn('user', '👤', 'User question (from AmbigQA)', null, originalQuestion);
+  }
 
   if (strategy.includes('clarification')) {
     // Step 1: Clarification question

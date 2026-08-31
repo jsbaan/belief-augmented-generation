@@ -4,7 +4,9 @@ Code for the paper: [Clarify, Abstain or Answer? Strategising in Conversation wi
 
 Please consider citing us if you find this project useful.
 
+🔗 **[Interactive viewer](https://jsbaan.github.io/belief-augmented-generation/)** — browse the paper's questions, generations, belief samples, judgments, and evaluations.
 ![](BAG1.png)
+
 
 # Belief-Augmented Generation (BAG)
 **Belief-Augmented Generation (BAG)** is a training-free method that:
