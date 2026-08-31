@@ -1,6 +1,8 @@
 # Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation
 
-Code for the paper *Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation* accepted at INLG 2026.
+Code for the paper: [Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation](https://arxiv.org/pdf/2605.25831) to appear at INLG 2026.
+
+Please consider citing us if you find this project useful.
 
 ![](BAG1.png)
 
@@ -117,7 +119,7 @@ Most cells are thin wrappers; the actual logic lives in:
 - `notebooks/latex_utils.py` — LaTeX table export for the paper
 
 ### Visualiser and annotation UI
-- `visualiser/pipeline.html` — self-contained web UI to browse per-question BAG output, judgements and belief states. Serve with `python -m http.server 8000` from the project root; the page expects generations under `data/generations/`.
+- `docs/index.html` — self-contained web UI to browse per-question BAG output, judgements and belief states. Serve with `python -m http.server 8000` from the project root; the page expects generations under `data/generations/` or uses the public hf dataset.
 
 ## Some details to more easily understand the code
 - The `reasoner=belief*` arguments stand for BAG; `reasoner=prompt` stands for SAG. BAG+ is enabled by setting `final_prompt=belief` and SAG+ by setting `final_prompt=prompt1`.
@@ -133,6 +135,3 @@ Most cells are thin wrappers; the actual logic lives in:
 
 ## Data license
 AmbigQA is redistributed under CC BY-SA 3.0 (see `data/input/ambignq_light/LICENSE`).
-
-## Citation
-Please consider citing us if you find this paper and code useful!
