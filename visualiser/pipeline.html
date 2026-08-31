@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>BAG Pipeline Visualizer</title>
+<!--    python -m http.server 8000 -->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    background: #f5f5f5;
+    color: #222;
+    line-height: 1.5;
+  }
+
+  /* ── Top bar ── */
+  #topbar {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  #topbar h1 { font-size: 15px; font-weight: 600; color: #fff; white-space: nowrap; }
+  #topbar select, #topbar button {
+    font-size: 12px; padding: 4px 8px; border-radius: 4px; border: none;
+    background: #2d2d50; color: #e0e0e0; cursor: pointer;
+  }
+  #topbar button { background: #4a90d9; color: #fff; font-weight: 600; padding: 5px 14px; }
+  #topbar button:hover { background: #357abd; }
+  #topbar label { font-size: 11px; color: #aaa; }
+  .cfg-group { display: flex; align-items: center; gap: 5px; }
+
+  /* ── Nav bar ── */
+  #navbar {
+    background: #fff;
+    border-bottom: 1px solid #ddd;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  #navbar button {
+    padding: 5px 16px; border: 1px solid #ccc; border-radius: 4px;
+    background: #fafafa; cursor: pointer; font-size: 13px;
+  }
+  #navbar button:hover:not(:disabled) { background: #eee; }
+  #navbar button:disabled { opacity: 0.4; cursor: default; }
+  #record-info { font-size: 13px; color: #555; }
+  #status { font-size: 12px; color: #888; margin-left: auto; }
+
+  /* ── Main content ── */
+  #main {
+    max-width: 960px;
+    margin: 24px auto;
+    padding: 0 20px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: #666;
+    background: #fafafa;
+    border-bottom: 1px solid #e8e8e8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-body { padding: 14px 16px; }
+  .judge-note {
+    padding: 5px 14px;
+    font-size: 11px;
+    color: #888;
+    font-style: italic;
+    background: #fafafa;
+    border-bottom: 1px solid #eee;
+  }
+
+  /* ── Question ── */
+  #question-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #111;
+    line-height: 1.4;
+  }
+
+  /* ── Ground truth ── */
+  .disambig-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+  }
+  .disambig-item:last-child { border-bottom: none; }
+  .disambig-q { color: #444; font-style: italic; margin-bottom: 3px; }
+  .disambig-a { display: flex; gap: 6px; flex-wrap: wrap; }
+  .answer-pill {
+    background: #e8f5e9; color: #2e7d32;
+    border: 1px solid #c8e6c9;
+    padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;
+  }
+
+  /* ── Belief state ── */
+  .toggle-btn {
+    font-size: 11px; color: #4a90d9; cursor: pointer;
+    background: none; border: none; padding: 0; text-decoration: underline;
+  }
+  .belief-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .belief-sample {
+    background: #f8f8f8;
+    border: 1px solid #e8e8e8;
+    border-radius: 5px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: #333;
+    line-height: 1.4;
+  }
+  .belief-num {
+    font-weight: 700;
+    color: #888;
+    min-width: 18px;
+    flex-shrink: 0;
+  }
+  .belief-sample-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 5px;
+    flex-wrap: wrap;
+  }
+  .belief-sample-text { font-size: 12px; color: #333; line-height: 1.4; }
+  .group-badge {
+    font-size: 10px; font-weight: 700; padding: 1px 5px;
+    border-radius: 3px; border: 1px solid; white-space: nowrap;
+  }
+  .interp-badge { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+
+  /* ── Belief legend ── */
+  .belief-legend { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .legend-section { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+  .legend-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+    color: #888; white-space: nowrap; padding-top: 2px;
+  }
+  .legend-chip {
+    font-size: 11px; padding: 2px 7px; border-radius: 4px; border: 1px solid;
+    white-space: nowrap;
+  }
+  .legend-chip-interp { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+
+  /* ── Strategy ── */
+  .strategy-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+  .badge-clarify { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .badge-direct  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .badge-abstain { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+
+  .reasoning-text { color: #444; font-size: 13px; margin-top: 10px; }
+
+  .raw-response-block {
+    margin-top: 12px;
+    background: #f5f7fa;
+    border: 1px solid #dde;
+    border-radius: 5px;
+    padding: 10px 12px;
+    font-size: 12px;
+    font-family: "SF Mono", "Fira Code", monospace;
+    white-space: pre-wrap;
+    color: #333;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+  .raw-section-label { font-weight: 700; color: #555; }
+  .cluster-line { color: #1d4ed8; }
+  .interp-line  { color: #15803d; }
+
+  /* ── Conversation ── */
+  .conv-turn {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .conv-turn:last-child { margin-bottom: 0; }
+  .conv-icon {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .icon-assistant { background: #dbeafe; }
+  .icon-user      { background: #f3e8ff; }
+  .conv-content { flex: 1; }
+  .conv-role {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #888; margin-bottom: 4px;
+  }
+  .conv-text {
+    background: #f8f8f8;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #222;
+    line-height: 1.5;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .conv-reasoning {
+    font-size: 11px; color: #888;
+    background: #fffbeb;
+    border-left: 3px solid #fbbf24;
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    border-radius: 0 4px 4px 0;
+    font-style: italic;
+  }
+
+  /* ── Judge badge ── */
+  .judge-row {
+    display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;
+    margin-top: 8px; font-size: 12px;
+  }
+  .verdict-pass {
+    background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;
+    padding: 2px 8px; border-radius: 4px; font-weight: 700; white-space: nowrap;
+  }
+  .verdict-fail {
+    background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;
+    padding: 2px 8px; border-radius: 4px; font-weight: 700; white-space: nowrap;
+  }
+  .verdict-null {
+    background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb;
+    padding: 2px 8px; border-radius: 4px; font-weight: 700; white-space: nowrap;
+  }
+  .judge-reason { color: #555; font-style: italic; }
+  .judge-ref { font-size: 11px; color: #888; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 3px; padding: 1px 5px; word-break: break-word; }
+
+  /* ── Baseline answers ── */
+  .baseline-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+  .baseline-text {
+    font-size: 13px; color: #333;
+    background: #f8f8f8;
+    border: 1px solid #e8e8e8;
+    border-radius: 5px;
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    line-height: 1.5;
+  }
+
+  /* ── Placeholder ── */
+  #placeholder {
+    text-align: center; color: #888; padding: 60px 20px;
+  }
+  #placeholder h2 { font-size: 18px; margin-bottom: 8px; }
+  #placeholder code { background: #eee; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+
+  .hidden { display: none !important; }
+  .separator { border-top: 1px solid #e8e8e8; margin: 12px 0; }
+</style>
+</head>
+<body>
+
+<!-- ── Top bar ── -->
+<div id="topbar">
+  <h1>BAG Pipeline Visualizer</h1>
+
+  <div class="cfg-group">
+    <label>Model</label>
+    <select id="sel-model">
+      <option>olmo2-13b-instruct</option>
+      <option>olmo2-7b-instruct</option>
+      <option>olmo3-7b-instruct</option>
+      <option>qwen3-8b</option>
+      <option>qwen3-14b</option>
+      <option>gemini-2.5-flash</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>Direct prompt</label>
+    <select id="sel-dp">
+      <option value="vanilla">free</option>
+      <option value="concise">concise</option>
+      <option value="sentence">sentence</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>Reasoner</label>
+    <select id="sel-rp">
+      <option value="belief7">BAG3</option>
+      <option value="belief6">BAG2</option>
+      <option value="belief">BAG1</option>
+      <option value="prompt">SAG</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>Seed</label>
+    <select id="sel-seed">
+      <option>50</option>
+      <option>42</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>User model</label>
+    <select id="sel-um">
+      <option>gemini-2.5-flash</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>Final prompt</label>
+    <select id="sel-fp">
+      <option value="prompt">prompt</option>
+      <option value="prompt1">prompt1</option>
+      <option value="belief">belief</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>Judge model</label>
+    <select id="sel-jm">
+      <option>gemini-2.5-flash</option>
+    </select>
+  </div>
+
+  <div class="cfg-group">
+    <label>Split</label>
+    <select id="sel-split">
+      <option value="dev">dev</option>
+      <option value="train">train</option>
+    </select>
+  </div>
+
+  <button id="load-btn">Load</button>
+</div>
+
+<!-- ── Nav bar ── -->
+<div id="navbar">
+  <button id="prev-btn" disabled>← Prev</button>
+  <button id="next-btn" disabled>Next →</button>
+  <span id="record-info">–</span>
+  <span id="status"></span>
+</div>
+
+<!-- ── Main ── -->
+<div id="main">
+  <div id="placeholder">
+    <h2>Select a config and click Load</h2>
+    <p>Serve from project root: <code>python3 -m http.server 8080</code><br>
+    then open <code>http://localhost:8080/visualiser/pipeline.html</code></p>
+  </div>
+
+  <div id="record-view" class="hidden">
+
+    <!-- Question -->
+    <div class="card">
+      <div class="card-header">Question</div>
+      <div class="card-body">
+        <div id="question-text"></div>
+      </div>
+    </div>
+
+    <!-- Ground truth -->
+    <div class="card">
+      <div class="card-header">AmbigQA references</div>
+      <div class="card-body" id="ground-truth-body"></div>
+    </div>
+
+    <!-- Belief state -->
+    <div class="card">
+      <div class="card-header">
+        Belief state
+        <button class="toggle-btn" id="belief-toggle">show</button>
+        <button class="toggle-btn" id="claim-annotations-toggle" style="margin-left:6px"
+                title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims. Not part of the assistant model's output.">LLM-judge claim annotations: off</button>
+        <!-- Hidden for the public demo — kept in JS for internal use.
+        <button class="toggle-btn" id="interp-badge-toggle" style="margin-left:6px">interps: on</button>
+        <button class="toggle-btn" id="judge1-toggle" style="margin-left:6px">1-intent: off</button>
+        <button class="toggle-btn" id="judgeAny-toggle" style="margin-left:6px">any-intent: off</button>
+        -->
+        <span id="belief-counts" style="font-size:11px;color:#aaa;margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0"></span>
+      </div>
+      <div class="card-body" id="belief-body" class="hidden"></div>
+    </div>
+
+    <!-- Strategy -->
+    <div class="card">
+      <div class="card-header">
+        Strategy
+        <span id="strategy-badge"></span>
+      </div>
+      <div class="card-body" id="strategy-body"></div>
+    </div>
+
+    <!-- Conversation -->
+    <div class="card" id="conv-card">
+      <div class="card-header">Conversation + Final answer</div>
+      <div class="judge-note">Pass/fail verdicts and reasoning are from a reference-based LLM judge (gemini-2.5-flash).</div>
+      <div class="card-body" id="conv-body"></div>
+    </div>
+
+    <!-- Baselines -->
+    <div class="card">
+      <div class="card-header">Baselines</div>
+      <div class="judge-note">Pass/fail verdicts and reasoning are from a reference-based LLM judge (gemini-2.5-flash).</div>
+      <div class="card-body" id="baselines-body"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ── Paper-facing prompt names ─────────────────────────────────────────────
+// The paper uses SAG / BAG1-3 and "free"; the code and JSONL filenames use
+// prompt / belief / belief6 / belief7 and vanilla. We keep the internal names
+// as <select> `value` attributes (buildFnames() and the raw data depend on
+// them) and only remap for display. Canonical source: nb_utils.py
+// `_prettify_reasoner_prompt` / `_prettify_direct_prompt`. If those change,
+// update the maps below to match.
+const REASONER_LABEL = { prompt: 'SAG', belief: 'BAG1', belief6: 'BAG2', belief7: 'BAG3' };
+const DIRECT_LABEL   = { vanilla: 'free' };
+const prettyReasoner = k => REASONER_LABEL[k] ?? k;
+const prettyDirect   = k => DIRECT_LABEL[k]   ?? k;
+
+// ── File-name builder (mirrors config.py build_output_fname) ──────────────
+function buildFnames({ assistant_model: am, direct_prompt: dp, reasoner_prompt: rp, seed, user_model: um, judge_model: jm, final_prompt: fp }) {
+  const dpKey  = (dp && dp !== 'vanilla') ? `_${dp}` : '';
+  // belief_sampling assumed 'unbiased' → no sampling key
+  const downDp = (rp && rp.includes('belief')) ? dpKey : '';
+  const fpKey  = fp ? `_${fp}` : '';
+
+  return {
+    direct:        `direct_${am}${dpKey}_${seed}.jsonl`,
+    disambiguated: `disambiguated_${am}${dpKey}_${seed}.jsonl`,
+    clarify:       `clarify_${am}${downDp}_${seed}_${rp}.jsonl`,
+    user:          `user_${am}_${um}${downDp}_${seed}_${rp}.jsonl`,
+    final:         `final_${am}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
+    judge_direct:  `judge_direct_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    judge_belief:  `judge_belief_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    judge_disambig: `judge_disambig_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    judge_clarify: `judge_clarify_${am}_${jm}${downDp}_${seed}_${rp}.jsonl`,
+    judge_final:   `judge_final_${am}_${jm}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
+    claim_var:     `claim_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    interp_var:    `interpretation_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
+  };
+}
+
+// ── JSONL loader ──────────────────────────────────────────────────────────
+async function loadJsonl(path) {
+  const resp = await fetch(path);
+  if (!resp.ok) { console.warn(`Missing: ${path}`); return []; }
+  const text = await resp.text();
+  return text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+}
+
+// ── State ─────────────────────────────────────────────────────────────────
+let records = [];  // joined records, ordered as in direct file
+let idx = 0;
+
+// ── Load ──────────────────────────────────────────────────────────────────
+document.getElementById('load-btn').addEventListener('click', loadData);
+
+async function loadData() {
+  const cfg = {
+    assistant_model: document.getElementById('sel-model').value,
+    direct_prompt:   document.getElementById('sel-dp').value,
+    reasoner_prompt: document.getElementById('sel-rp').value,
+    seed:            document.getElementById('sel-seed').value,
+    user_model:      document.getElementById('sel-um').value,
+    judge_model:     document.getElementById('sel-jm').value,
+    final_prompt:    document.getElementById('sel-fp').value,
+  };
+
+  setStatus('Loading…');
+  document.getElementById('load-btn').disabled = true;
+
+  const split = document.getElementById('sel-split').value;
+  // For local files
+  // const base = split === 'train' ? '../data/generations/' : `../data/generations/${split}/`;
+  const HF_BASE = 'https://huggingface.co/datasets/jsbaan/bag-paper-data/resolve/main/';
+  const base = split === 'train' ? HF_BASE : `${HF_BASE}${split}/`;
+
+  const fnames = buildFnames(cfg);
+  console.log('Loading files:', fnames);
+
+  try {
+    const [direct, disamb, clarify, user, final, jDirect, jBelief, jDisamb, jClarify, jFinal, claimVar, interpVar] = await Promise.all([
+      loadJsonl(base + fnames.direct),
+      loadJsonl(base + fnames.disambiguated),
+      loadJsonl(base + fnames.clarify),
+      loadJsonl(base + fnames.user),
+      loadJsonl(base + fnames.final),
+      loadJsonl(base + fnames.judge_direct),
+      loadJsonl(base + fnames.judge_belief),
+      loadJsonl(base + fnames.judge_disambig),
+      loadJsonl(base + fnames.judge_clarify),
+      loadJsonl(base + fnames.judge_final),
+      loadJsonl(base + fnames.claim_var),
+      loadJsonl(base + fnames.interp_var),
+    ]);
+
+    // Index secondary files by id for O(1) lookup
+    const byId = arr => Object.fromEntries(arr.map(r => [r.id, r]));
+    const disambById  = byId(disamb);
+    const clarifyById = byId(clarify);
+    const userById    = byId(user);
+    const finalById   = byId(final);
+    const jdById      = byId(jDirect);
+    const jbById      = byId(jBelief);
+    const jdbById     = byId(jDisamb);
+    const jcById      = byId(jClarify);
+    const jfById      = byId(jFinal);
+    const cvById      = byId(claimVar);
+    const ivById      = byId(interpVar);
+
+    // Build joined records in order of the direct file
+    records = direct.map(d => ({
+      id:       d.id,
+      direct:   d,
+      disamb:   disambById[d.id]  || null,
+      clarify:  clarifyById[d.id] || null,
+      user:     userById[d.id]    || null,
+      final:    finalById[d.id]   || null,
+      jDirect:  jdById[d.id]      || null,
+      jBelief:  jbById[d.id]      || null,
+      jDisamb:  jdbById[d.id]     || null,
+      jClarify: jcById[d.id]      || null,
+      jFinal:   jfById[d.id]      || null,
+      claimVar: cvById[d.id]      || null,
+      interpVar: ivById[d.id]     || null,
+    }));
+
+    if (records.length === 0) {
+      setStatus('No records found — check console for missing files');
+      return;
+    }
+
+    idx = 0;
+    document.getElementById('placeholder').classList.add('hidden');
+    document.getElementById('record-view').classList.remove('hidden');
+    render();
+    setStatus(`Loaded ${records.length} records`);
+  } catch (e) {
+    setStatus('Error: ' + e.message);
+    console.error(e);
+  }
+
+  document.getElementById('load-btn').disabled = false;
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────
+document.getElementById('prev-btn').addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
+document.getElementById('next-btn').addEventListener('click', () => { if (idx < records.length - 1) { idx++; render(); } });
+
+document.addEventListener('keydown', e => {
+  if (records.length === 0) return;
+  if (e.key === 'ArrowLeft'  && idx > 0)                { idx--; render(); }
+  if (e.key === 'ArrowRight' && idx < records.length-1) { idx++; render(); }
+});
+
+// ── Render ────────────────────────────────────────────────────────────────
+function render() {
+  const rec = records[idx];
+  document.getElementById('record-info').textContent = `Record ${idx + 1} / ${records.length}`;
+  document.getElementById('prev-btn').disabled = idx === 0;
+  document.getElementById('next-btn').disabled = idx === records.length - 1;
+
+  // scroll to top
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  renderQuestion(rec);
+  renderGroundTruth(rec);
+  renderBeliefState(rec);
+  renderStrategy(rec);
+  renderConversation(rec);
+  renderBaselines(rec);
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ── Question ──────────────────────────────────────────────────────────────
+function renderQuestion(rec) {
+  const q = rec.direct?.context?.question || '–';
+  document.getElementById('question-text').textContent = q;
+}
+
+// ── Ground truth ──────────────────────────────────────────────────────────
+function renderGroundTruth(rec) {
+  const el = document.getElementById('ground-truth-body');
+  const disambiguations = rec.direct?.context?.disambiguations || [];
+  const refs = rec.direct?.context?.references || [];
+
+  if (disambiguations.length === 0 && refs.length === 0) {
+    el.innerHTML = '<em style="color:#888">No disambiguations available</em>';
+    return;
+  }
+
+  if (disambiguations.length > 0) {
+    const seen = new Set();
+    el.innerHTML = disambiguations.map(d => {
+      const key = [...(d.answer || [])].sort().join('|');
+      if (seen.has(key)) return '';
+      seen.add(key);
+      const answers = (d.answer || []).map(a => `<span class="answer-pill">${esc(a)}</span>`).join(' ');
+      return `<div class="disambig-item">
+        <div class="disambig-q">→ ${esc(d.question)}</div>
+        <div class="disambig-a">${answers}</div>
+      </div>`;
+    }).join('');
+  } else {
+    // singleAnswer questions: show refs
+    const seen = new Set();
+    el.innerHTML = refs.map(r => {
+      const key = [...r].sort().join('|');
+      if (seen.has(key)) return '';
+      seen.add(key);
+      const answers = r.map(a => `<span class="answer-pill">${esc(a)}</span>`).join(' ');
+      return `<div class="disambig-item"><div class="disambig-a">${answers}</div></div>`;
+    }).join('');
+  }
+}
+
+// ── Belief state ──────────────────────────────────────────────────────────
+// Colors for claim groups A–E, plus a fallback
+const CLAIM_COLORS = {
+  A: { bg: '#dbeafe', fg: '#1d4ed8', border: '#93c5fd' },
+  B: { bg: '#dcfce7', fg: '#15803d', border: '#86efac' },
+  C: { bg: '#fef9c3', fg: '#854d0e', border: '#fde68a' },
+  D: { bg: '#fce7f3', fg: '#9d174d', border: '#f9a8d4' },
+  E: { bg: '#e0e7ff', fg: '#4338ca', border: '#a5b4fc' },
+  _: { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },
+};
+function claimColor(label) { return CLAIM_COLORS[label] || CLAIM_COLORS['_']; }
+
+// Colors for interpretation groups A–E (teal, purple, amber, lime, slate) — old train format
+const INTERP_COLORS = {
+  A: { bg: '#ccfbf1', fg: '#0f766e', border: '#5eead4' },
+  B: { bg: '#f3e8ff', fg: '#7e22ce', border: '#d8b4fe' },
+  C: { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },
+  D: { bg: '#ecfccb', fg: '#3f6212', border: '#bef264' },
+  E: { bg: '#e0f2fe', fg: '#0369a1', border: '#7dd3fc' },
+  _: { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },
+};
+function interpColor(label) { return INTERP_COLORS[label] || INTERP_COLORS['_']; }
+
+// Colors for new format classification labels: yes/no/clarify/refuse
+const INTERP_CLASS_COLORS = {
+  yes:     { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },  // amber = contextualised
+  no:      { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },  // gray  = uncontextualised
+  clarify: { bg: '#dbeafe', fg: '#1d4ed8', border: '#bfdbfe' },  // blue  = asks CQ
+  refuse:  { bg: '#fee2e2', fg: '#b91c1c', border: '#fecaca' },  // red   = refuses
+};
+function interpClassColor(label) { return INTERP_CLASS_COLORS[label] || INTERP_CLASS_COLORS['no']; }
+
+let beliefVisible = false;
+document.getElementById('belief-toggle').addEventListener('click', () => {
+  beliefVisible = !beliefVisible;
+  document.getElementById('belief-body').style.display = beliefVisible ? '' : 'none';
+  document.getElementById('belief-toggle').textContent = beliefVisible ? 'hide' : 'show';
+});
+
+// Single "claim annotations" toggle controls both sample-background colors
+// and the per-sample C:label badges — they're two views of the same info.
+let claimAnnotationsVisible = false;
+let claimColorVisible = claimAnnotationsVisible;   // aliases kept so the render
+let claimBadgeVisible = claimAnnotationsVisible;   // pipeline stays unchanged
+function applyClaimColors() {
+  document.querySelectorAll('#belief-body .belief-sample[data-claim-bg]').forEach(el => {
+    el.style.background  = claimColorVisible ? el.dataset.claimBg     : '';
+    el.style.borderColor = claimColorVisible ? el.dataset.claimBorder  : '';
+  });
+}
+function applyClaimBadges() {
+  document.querySelectorAll('#belief-body .claim-badge').forEach(el => {
+    el.style.display = claimBadgeVisible ? '' : 'none';
+  });
+}
+document.getElementById('claim-annotations-toggle').addEventListener('click', () => {
+  claimAnnotationsVisible = !claimAnnotationsVisible;
+  claimColorVisible = claimAnnotationsVisible;
+  claimBadgeVisible = claimAnnotationsVisible;
+  document.getElementById('claim-annotations-toggle').textContent =
+    claimAnnotationsVisible ? 'LLM-judge claim annotations: on' : 'LLM-judge claim annotations: off';
+  applyClaimColors();
+  applyClaimBadges();
+});
+
+// Interps / 1-intent / any-intent buttons are hidden from the public demo
+// (see comment in the belief-state card header). State variables are kept so
+// the render helpers still work; defaults are "off" so nothing shows.
+let interpBadgeVisible = false;
+function applyInterpBadges() {
+  document.querySelectorAll('#belief-body .interp-badge-el').forEach(el => {
+    el.style.display = interpBadgeVisible ? '' : 'none';
+  });
+}
+
+let judge1Visible = false;
+function applyJudge1() {
+  document.querySelectorAll('#belief-body .judge-1intent').forEach(el => {
+    el.style.display = judge1Visible ? '' : 'none';
+  });
+}
+
+let judgeAnyVisible = false;
+function applyJudgeAny() {
+  document.querySelectorAll('#belief-body .judge-anyintent').forEach(el => {
+    el.style.display = judgeAnyVisible ? '' : 'none';
+  });
+}
+
+function miniVerdictBadge(v, label, extraClass) {
+  if (!v) return '';
+  const isPass = v.verdict === 1, isFail = v.verdict === 0;
+  const bg = isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#f3f4f6';
+  const fg = isPass ? '#15803d' : isFail ? '#b91c1c' : '#6b7280';
+  const border = isPass ? '#bbf7d0' : isFail ? '#fecaca' : '#e5e7eb';
+  const icon = isPass ? '✓' : isFail ? '✗' : '–';
+  return `<span class="group-badge ${extraClass}" style="background:${bg};color:${fg};border-color:${border}">${icon} ${esc(label)}</span>`;
+}
+
+function renderBeliefState(rec) {
+  const el = document.getElementById('belief-body');
+  // belief_state is 0-indexed; sample_indices in variation files are 1-based
+  const samples = rec.direct?.generations?.belief_state || [];
+  const cv = rec.claimVar?.generations?.claim_variation || null;
+  const iv = rec.interpVar?.generations?.interpretation_variation || null;
+
+  // Per-sample judge data (0-indexed, aligned with belief_state)
+  const jb1Samples  = rec.jBelief?.generations?.belief?.samples || [];
+  const jbAnySamples = rec.jBelief?.generations?.belief_anyref?.samples
+                    || rec.jBelief?.generations?.belief?.samples || [];
+
+  // Update header counts (visible even when body is collapsed)
+  const countsEl = document.getElementById('belief-counts');
+  if (countsEl) {
+    const parts = [];
+    if (cv != null) parts.push(`Claims: ${cv.n_distinct_claims}`);
+    // Interps counts hidden from the public demo — kept in `iv` for internal use.
+    countsEl.textContent = parts.join('  |  ');
+  }
+
+  if (samples.length === 0) {
+    el.innerHTML = '<em style="color:#888">No belief state samples</em>';
+  } else {
+    // Build lookup: 1-based sample index → claim info
+    // sample_indices in the variation files are 1-based; belief_state array is 0-based
+    const claimByIdx = {};  // sampleIdx (1-based) → { label, type }
+    if (cv?.claims) {
+      for (const claim of cv.claims) {
+        for (const idx of claim.sample_indices) {
+          claimByIdx[idx] = { label: claim.label, type: claim.type };
+        }
+      }
+    }
+
+    // Build lookup: 1-based sample index → interp info
+    // Handles two formats:
+    //   New (dev): classifications: [{index, label: yes/no/clarify/refuse, scope}]
+    //   Old (train): interpretations: [{label: A/B/C, sample_indices, representative, contextualized}]
+    const interpByIdx = {};
+    if (iv?.classifications) {
+      for (const cls of iv.classifications) {
+        interpByIdx[cls.index] = { format: 'new', label: cls.label, scope: cls.scope || '' };
+      }
+    } else if (iv?.interpretations) {
+      for (const interp of iv.interpretations) {
+        const noInterp = /no interpretation/i.test(interp.representative || '');
+        for (const idx of interp.sample_indices) {
+          interpByIdx[idx] = { format: 'old', label: interp.label, contextualized: interp.contextualized, noInterp };
+        }
+      }
+    }
+
+    // Legend
+    let legendHtml = '';
+    if (cv || iv) {
+      legendHtml = '<div class="belief-legend">';
+      if (cv?.claims) {
+        const chips = cv.claims.map(c => {
+          const col = claimColor(c.label);
+          return `<span class="legend-chip" style="background:${col.bg};color:${col.fg};border-color:${col.border}">${esc(c.label)}: ${esc(c.representative)} (n=${c.n_samples})</span>`;
+        }).join('');
+        legendHtml += `<div class="legend-section"><span class="legend-title" title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims.">LLM-judge claims</span>${chips}</div>`;
+      }
+      // Interps legend hidden from the public demo — kept in `iv` for internal use.
+      legendHtml += '</div>';
+    }
+
+    // Grid: one cell per belief sample (array index i → sample number i+1)
+    const gridHtml = samples.map((s, i) => {
+      const sampleIdx = i + 1;  // convert 0-based array index to 1-based sample number
+      const text = s.raw_response || s.response || '';
+      const claim = claimByIdx[sampleIdx];
+      const interp = interpByIdx[sampleIdx];
+
+      const col = claim ? claimColor(claim.label) : null;
+      const claimDataAttrs = col ? `data-claim-bg="${col.bg}" data-claim-border="${col.border}"` : '';
+
+      let badges = '';
+      if (claim) {
+        badges += `<span class="group-badge claim-badge" style="background:${col.bg};color:${col.fg};border-color:${col.border}">C:${esc(claim.label)}</span>`;
+      }
+      if (interp) {
+        let icol, badgeText;
+        if (interp.format === 'new') {
+          icol = interpClassColor(interp.label);
+          const scopeText = interp.scope ? ` — ${interp.scope}` : '';
+          badgeText = `I:${esc(interp.label)}${esc(scopeText)}`;
+        } else {
+          icol = interp.noInterp ? { bg: '#fee2e2', fg: '#b91c1c', border: '#fecaca' } : interpColor(interp.label);
+          badgeText = `I:${esc(interp.label)}`;
+        }
+        badges += `<span class="group-badge interp-badge-el" style="background:${icol.bg};color:${icol.fg};border-color:${icol.border}">${badgeText}</span>`;
+      }
+      badges += miniVerdictBadge(jb1Samples[i],  '1-int', 'judge-1intent');
+      badges += miniVerdictBadge(jbAnySamples[i], 'any',   'judge-anyintent');
+
+      return `<div class="belief-sample" ${claimDataAttrs}>
+        <div class="belief-sample-header">
+          <span class="belief-num">${sampleIdx}.</span>${badges}
+        </div>
+        <div class="belief-sample-text">${esc(text)}</div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = legendHtml + `<div class="belief-grid">${gridHtml}</div>`;
+    applyClaimColors();
+    applyClaimBadges();
+    applyInterpBadges();
+    applyJudge1();
+    applyJudgeAny();
+  }
+
+  // Respect persistent visibility state (don't reset on navigation)
+  el.style.display = beliefVisible ? '' : 'none';
+  document.getElementById('belief-toggle').textContent = beliefVisible ? 'hide' : 'show';
+}
+
+// ── Strategy ──────────────────────────────────────────────────────────────
+function renderStrategy(rec) {
+  const el = document.getElementById('strategy-body');
+  const badgeEl = document.getElementById('strategy-badge');
+  const clarify = rec.clarify;
+
+  if (!clarify) {
+    badgeEl.innerHTML = '';
+    el.innerHTML = '<em style="color:#888">No clarify step output</em>';
+    return;
+  }
+
+  const strategy = clarify.generations?.strategy || '';
+  const reasoning = clarify.generations?.reasoning || '';
+  const rawResponse = clarify.generations?.raw_response || '';
+
+  // Badge
+  let badgeClass = 'badge-clarify', badgeLabel = strategy;
+  if (strategy.includes('direct')) { badgeClass = 'badge-direct'; badgeLabel = 'direct answer'; }
+  else if (strategy.includes('abstain')) { badgeClass = 'badge-abstain'; badgeLabel = 'abstain'; }
+  else if (strategy.includes('clarification')) { badgeLabel = 'clarification question'; }
+  badgeEl.innerHTML = `<span class="strategy-badge ${badgeClass}">${esc(badgeLabel)}</span>`;
+
+  let html = '';
+
+  if (reasoning) {
+    html += `<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(reasoning)}</div>`;
+  }
+
+  if (rawResponse) {
+    html += `<div class="separator"></div>`;
+    html += `<div class="raw-response-block">${formatRawResponse(rawResponse)}</div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// Parse raw_response and highlight CLUSTERS / INTERPRETATIONS / STRATEGY / REASONING sections
+function formatRawResponse(raw) {
+  // Split into lines and apply color coding
+  return raw.split('\n').map(line => {
+    const e = esc(line);
+    if (/^CLUSTERS?:/i.test(line) || /^INTERPRETATIONS?:/i.test(line) || /^STRATEGY:/i.test(line) || /^REASONING:/i.test(line)) {
+      return `<span class="raw-section-label">${e}</span>`;
+    }
+    if (/^\s*[A-Z]\s*[\(\{]/.test(line)) {
+      return `<span class="cluster-line">${e}</span>`;
+    }
+    if (/^\s*[A-Z]\s*→/.test(line) || /^\s*[A-Z]\s*->/.test(line)) {
+      return `<span class="interp-line">${e}</span>`;
+    }
+    return e;
+  }).join('\n');
+}
+
+// ── Conversation ──────────────────────────────────────────────────────────
+function renderConversation(rec) {
+  const el = document.getElementById('conv-body');
+  const clarify = rec.clarify;
+  const user = rec.user;
+  const final = rec.final;
+  const jFinal = rec.jFinal;
+
+  let html = '';
+
+  const strategy = clarify?.generations?.strategy || '';
+
+  if (strategy.includes('clarification')) {
+    // Step 1: Clarification question
+    const cq = clarify?.generations?.response || '';
+    html += convTurn('assistant', '🤖', 'Clarification question', null, cq);
+
+    // Step 2: User answer
+    const uReasoning = user?.generations?.reasoning || null;
+    const uResponse  = user?.generations?.response  || '';
+    html += convTurn('user', '👤', 'User response', uReasoning, uResponse);
+
+    // Step 3: Final answer — prompt returns list of strings; prompt1/belief returns parsed dict
+    let finalText = '', finalReasoning = null, finalBadge = '';
+    const finalGen = final?.generations;
+    if (Array.isArray(finalGen)) {
+      finalText = finalGen[0] || '';
+    } else if (finalGen && typeof finalGen === 'object') {
+      finalText = finalGen.response || '';
+      finalReasoning = finalGen.reasoning || null;
+      const st = finalGen.strategy || '';
+      if (st.includes('abstain')) {
+        finalBadge = `<span class="strategy-badge badge-abstain">abstain</span>`;
+      } else if (st) {
+        finalBadge = `<span class="strategy-badge badge-direct">answer</span>`;
+      }
+    }
+    const jf = jFinal?.generations?.final;
+    const judgeHtml = jf ? judgeBlock(jf, jFinal?.context?.final_ref || null) : '';
+    html += convTurn('assistant', '🤖', 'Final answer', finalReasoning, finalText, judgeHtml, finalBadge);
+
+  } else if (strategy.includes('direct')) {
+    // Direct answer from clarify step (no conversation)
+    const response = clarify?.generations?.response || '';
+    const jc = rec.jClarify?.generations?.reason_direct;
+    const judgeHtml = jc ? judgeBlock(jc, rec.jClarify?.context?.direct_ref || null) : '';
+    html += convTurn('assistant', '🤖', 'Direct answer (no clarification)', null, response, judgeHtml);
+
+  } else if (strategy.includes('abstain')) {
+    const response = clarify?.generations?.response || '';
+    html += convTurn('assistant', '🤖', 'Abstain', null, response);
+
+  } else {
+    html = '<em style="color:#888">No conversation data</em>';
+  }
+
+  el.innerHTML = html;
+}
+
+function convTurn(role, icon, label, reasoning, text, extra = '', badge = '') {
+  const reasoningHtml = reasoning
+    ? `<div class="conv-reasoning">Internal reasoning: ${esc(reasoning)}</div>`
+    : '';
+  return `
+    <div class="conv-turn">
+      <div class="conv-icon icon-${role}">${icon}</div>
+      <div class="conv-content">
+        <div class="conv-role">${esc(label)} ${badge}</div>
+        ${reasoningHtml}
+        <div class="conv-text">${esc(text)}</div>
+        ${extra}
+      </div>
+    </div>`;
+}
+
+function judgeBlock(j, ref) {
+  if (!j) return '';
+  const verdict = j.verdict;
+  const reason  = j.reasoning || '';
+  const badgeHtml = verdict === 1
+    ? `<span class="verdict-pass">✓ pass</span>`
+    : verdict === 0
+      ? `<span class="verdict-fail">✗ fail</span>`
+      : `<span class="verdict-null">– no judge</span>`;
+  const refHtml = ref != null
+    ? `<span class="judge-ref" title="${esc(ref)}">${ref === 'any' ? 'any ref' : esc(ref)}</span>`
+    : '';
+  return `<div class="judge-row">${badgeHtml}${refHtml}<span class="judge-reason">${esc(reason)}</span></div>`;
+}
+
+// ── Baselines ─────────────────────────────────────────────────────────────
+function renderBaselines(rec) {
+  const el = document.getElementById('baselines-body');
+  let html = '';
+
+  // Direct answer (sampled) — judge evals `answer` field
+  const directSampled = rec.direct?.generations?.answer?.[0]?.raw_response || '';
+  const jd    = rec.jDirect?.generations?.direct;
+  const jdAny = rec.jDirect?.generations?.direct_anyref;
+  if (directSampled) {
+    html += `<div class="baseline-label">Direct answer (sampled)</div>`;
+    html += `<div class="baseline-text">${esc(directSampled)}</div>`;
+    if (jd)    html += judgeBlock(jd,    rec.jDirect?.context?.direct_ref || null);
+    if (jdAny) html += judgeBlock(jdAny, 'any');
+  }
+
+  // Belief state any-ref coverage
+  // For non-ambiguous questions belief_anyref is null (only 1 ref), fall back to belief
+  const jbAny = rec.jBelief?.generations?.belief_anyref ?? rec.jBelief?.generations?.belief;
+  if (jbAny) {
+    html += `<div class="separator"></div>`;
+    html += `<div class="baseline-label">Belief state (any-ref coverage)</div>`;
+    html += judgeBlock(jbAny, 'any');
+
+    // Show a passing sample's generation + judge reasoning (if any)
+    const beliefSamples = rec.direct?.generations?.belief_state || [];
+    const jbSamples = jbAny.samples || [];
+    const passingIdx = jbSamples.findIndex(s => s.verdict === 1);
+    if (passingIdx !== -1 && beliefSamples[passingIdx]) {
+      const gen = beliefSamples[passingIdx].raw_response || beliefSamples[passingIdx].response || '';
+      const reasoning = jbSamples[passingIdx].reasoning || '';
+      html += `<div style="margin-top:8px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:4px;">Passing generation (sample ${passingIdx + 1})</div>`;
+      html += `<div class="baseline-text" style="font-size:12px;">${esc(gen)}</div>`;
+      if (reasoning) {
+        html += `<div class="conv-reasoning" style="margin-top:4px;">Judge: ${esc(reasoning)}</div>`;
+      }
+    }
+  }
+
+  // Disambiguated
+  const disamb = rec.disamb;
+  if (disamb) {
+    const dq     = disamb.context?.disambiguated_question || '';
+    const ref    = (disamb.context?.reference || []).join(', ');
+    const ans    = disamb.generations?.answer?.[0] || '';
+    const jdb    = rec.jDisamb?.generations?.disambig;
+    const jdbAny = rec.jDisamb?.generations?.disambig_anyref;
+    html += `<div class="separator"></div>`;
+    html += `<div class="baseline-label">Disambiguated answer</div>`;
+    if (dq) html += `<div style="font-size:12px;color:#666;margin-bottom:4px;font-style:italic">For: "${esc(dq)}" — ref: <strong>${esc(ref)}</strong></div>`;
+    html += `<div class="baseline-text">${esc(ans)}</div>`;
+    if (jdb)    html += judgeBlock(jdb,    rec.jDisamb?.context?.disambig_ref || null);
+    if (jdbAny) html += judgeBlock(jdbAny, 'any');
+  }
+
+  el.innerHTML = html || '<em style="color:#888">No baseline data</em>';
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,104 @@
+#!/bin/bash
+
+#SBATCH --partition=rome
+#SBATCH --job-name=judge
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=84G
+#SBATCH --time=25:00:00
+#SBATCH --output=slurm_outputs/%A_judge.out
+
+if [[ $(hostname) == *"snellius"* ]]; then
+  module purge
+  module load 2024
+  module load Miniconda3/24.7.1-0
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda deactivate
+  conda activate clarify-env-3.12
+fi
+
+SEED=50
+SPLIT="dev"
+if [[ "${SPLIT}" == "train" ]]; then MAX_EXAMPLES=1000; else MAX_EXAMPLES=2000; fi
+MODEL_NAMES=(
+  "gemini-2.5-flash"
+  "olmo2-7b-instruct"
+  "olmo3-7b-instruct"
+  "olmo2-13b-instruct"
+  "qwen3-8b"
+  "qwen3-14b"
+#  "qwen3-8b-think"
+#  "olmo3-7b-think"
+)
+
+DIRECT_PROMPTS=(
+  "vanilla"
+  "concise"
+  "sentence"
+)
+
+BELIEF_SAMPLINGS=(
+  "unbiased"
+)
+
+REASONER_PROMPTS=(
+  "belief"
+  "belief6"
+  "belief7"
+  "belief8"
+)
+
+FINAL_PROMPTS=(
+  "prompt"
+  "prompt1"
+  "belief"
+)
+JUDGE_MODEL="gemini-2.5-flash"
+USER_MODEL="gemini-2.5-flash"
+
+run_judge() {
+  local branch=$1
+  local reasoner_prompt=$2
+  local final_prompt=${3:-prompt}
+  python pipeline.py \
+    --assistant_model  ${MODEL_NAME} \
+    --user_model       ${USER_MODEL} \
+    --judge_model      ${JUDGE_MODEL} \
+    ${DIRECT_PROMPT:+--direct_prompt ${DIRECT_PROMPT}} \
+    ${BELIEF_SAMPLING:+--belief_sampling ${BELIEF_SAMPLING}} \
+    --seed             ${SEED} \
+    --steps            judge \
+    --split            ${SPLIT} \
+    --max_examples     ${MAX_EXAMPLES} \
+    ${reasoner_prompt:+--reasoner_prompt ${reasoner_prompt}} \
+    --judge_branch     ${branch} \
+    --final_prompt     ${final_prompt} \
+    --force \
+    --anyref &
+}
+
+#### LOOP ######
+for MODEL_NAME in "${MODEL_NAMES[@]}"; do
+  # "prompt" reasoner: run once per model (no direct_prompt dependency)
+  DIRECT_PROMPT="" BELIEF_SAMPLING=""
+  run_judge "reasoner" "prompt"
+  for FINAL_PROMPT in "${FINAL_PROMPTS[@]}"; do
+    run_judge "final" "prompt" ${FINAL_PROMPT}
+  done
+
+  for DIRECT_PROMPT in "${DIRECT_PROMPTS[@]}"; do
+    for BELIEF_SAMPLING in "${BELIEF_SAMPLINGS[@]}"; do
+      run_judge "direct"
+      run_judge "belief"
+      run_judge "disambig"
+      for REASONER_PROMPT in "${REASONER_PROMPTS[@]}"; do
+        run_judge "reasoner" ${REASONER_PROMPT}
+        for FINAL_PROMPT in "${FINAL_PROMPTS[@]}"; do
+          run_judge "final" ${REASONER_PROMPT} ${FINAL_PROMPT}
+        done
+      done
+    done
+  done
+done
+
+wait

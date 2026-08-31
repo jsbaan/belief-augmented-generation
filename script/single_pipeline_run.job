@@ -1,0 +1,140 @@
+#!/bin/bash
+
+#SBATCH --partition=gpu_h100
+#SBATCH --gres=gpu:1
+#SBATCH --job-name=run_pipeline
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --time=24:00:00
+#SBATCH --output=slurm_outputs/%A_%x.out
+
+if [[ $(hostname) == *"snellius"* ]]; then
+  module purge
+  module load 2024
+  module load Miniconda3/24.7.1-0
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda deactivate
+  conda activate clarify-env-3.12
+
+  # Monitor GPU usage every 30 seconds and log to file
+  nvidia-smi --query-gpu=timestamp,name,utilization.gpu,memory.used,memory.free,power.draw --format=csv -l 30 > slurm_outputs/gpu_utilization_${SLURM_JOB_ID}.csv &
+  NVIDIA_SMI_PID=$!
+fi
+
+# MODEL_NAME and DIRECT_PROMPT are injected by launch.sh via: sbatch --export=ALL,MODEL_NAME=<model>,DIRECT_PROMPT=<dp>
+echo "Running pipeline for model: ${MODEL_NAME}, direct_prompt: ${DIRECT_PROMPT}"
+
+SPLIT="dev"
+if [[ "${SPLIT}" == "train" ]]; then MAX_EXAMPLES=1000; else MAX_EXAMPLES=2000; fi
+SEED=50
+
+BELIEF_SAMPLINGS=(
+  "unbiased"
+)
+
+## DIRECT & DISAMBIGUATED
+for BELIEF_SAMPLING in "${BELIEF_SAMPLINGS[@]}"; do
+  python pipeline.py \
+    --max_examples ${MAX_EXAMPLES} \
+    --assistant_model ${MODEL_NAME} \
+    --direct_prompt ${DIRECT_PROMPT} \
+    --belief_sampling ${BELIEF_SAMPLING} \
+    --seed ${SEED} \
+    --n_samples 10 \
+    --force \
+    --split ${SPLIT} \
+    --filter_conflicts \
+    --steps direct disambiguated
+done
+
+REASONER_PROMPTS=(
+  "belief"
+#  "belief1"
+#  "belief2"
+#  "belief3"
+#  "belief4"
+#  "belief5"
+  "belief6"
+  "belief7"
+#  "belief8"
+)
+USER_MODEL="gemini-2.5-flash"
+#USER_MODEL="haiku4.5"
+
+FINAL_PROMPTS=(
+  "prompt"
+  "prompt1"
+  "belief"
+)
+
+# prompt reasoner doesn't depend on direct_prompt — only run it for one canonical value to avoid redundant jobs
+if [[ "${DIRECT_PROMPT}" == "sentence" ]]; then
+  python pipeline.py \
+      --max_examples ${MAX_EXAMPLES} \
+      --assistant_model ${MODEL_NAME} \
+      --user_model ${USER_MODEL} \
+      --reasoner_prompt prompt \
+      --direct_prompt ${DIRECT_PROMPT} \
+      --final_prompt prompt \
+      --seed ${SEED} \
+      --force \
+      --split ${SPLIT} \
+      --filter_conflicts \
+      --steps reasoner user
+
+  for FINAL_PROMPT in "${FINAL_PROMPTS[@]}"; do
+    python pipeline.py \
+      --max_examples ${MAX_EXAMPLES} \
+      --assistant_model ${MODEL_NAME} \
+      --user_model ${USER_MODEL} \
+      --reasoner_prompt prompt \
+      --direct_prompt ${DIRECT_PROMPT} \
+      --final_prompt ${FINAL_PROMPT} \
+      --seed ${SEED} \
+      --force \
+      --split ${SPLIT} \
+      --filter_conflicts \
+      --steps final
+  done
+fi
+
+# BELIEF-BASED REASONER + DOWNSTREAM INTERACTION
+for BELIEF_SAMPLING in "${BELIEF_SAMPLINGS[@]}"; do
+  for REASONER_PROMPT in "${REASONER_PROMPTS[@]}"; do
+    python pipeline.py \
+      --max_examples ${MAX_EXAMPLES} \
+      --assistant_model ${MODEL_NAME} \
+      --user_model ${USER_MODEL} \
+      --reasoner_prompt ${REASONER_PROMPT} \
+      --direct_prompt ${DIRECT_PROMPT} \
+      --belief_sampling ${BELIEF_SAMPLING} \
+      --final_prompt prompt \
+      --seed ${SEED} \
+      --force \
+      --split ${SPLIT} \
+      --filter_conflicts \
+      --steps reasoner user
+
+    for FINAL_PROMPT in "${FINAL_PROMPTS[@]}"; do
+      python pipeline.py \
+        --max_examples ${MAX_EXAMPLES} \
+        --assistant_model ${MODEL_NAME} \
+        --user_model ${USER_MODEL} \
+        --reasoner_prompt ${REASONER_PROMPT} \
+        --direct_prompt ${DIRECT_PROMPT} \
+        --belief_sampling ${BELIEF_SAMPLING} \
+        --final_prompt ${FINAL_PROMPT} \
+        --seed ${SEED} \
+        --force \
+        --split ${SPLIT} \
+        --filter_conflicts \
+        --steps final
+    done
+  done
+done
+
+if [[ $(hostname) == *"snellius"* ]]; then
+  kill $NVIDIA_SMI_PID
+fi
+
+wait

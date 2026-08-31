@@ -1,0 +1,106 @@
+#!/bin/bash
+
+#SBATCH --partition=rome
+#SBATCH --job-name=faithfulness
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=8
+#SBATCH --mem=84G
+#SBATCH --time=24:00:00
+#SBATCH --output=slurm_outputs/%A_faithfulness.out
+
+if [[ $(hostname) == *"snellius"* ]]; then
+  module purge
+  module load 2024
+  module load Miniconda3/24.7.1-0
+  source "$(conda info --base)/etc/profile.d/conda.sh"
+  conda deactivate
+  conda activate clarify-env-3.12
+fi
+
+SEED=50
+SPLIT="dev"
+if [[ "${SPLIT}" == "train" ]]; then MAX_EXAMPLES=1000; else MAX_EXAMPLES=2000; fi
+JUDGE_MODEL="gemini-2.5-flash"
+MODEL_NAMES=(
+  "olmo2-7b-instruct"
+  "olmo2-13b-instruct"
+  "qwen3-8b"
+  "olmo3-7b-instruct"
+  "qwen3-14b"
+  "gemini-2.5-flash"
+)
+
+DIRECT_PROMPTS=(
+  "vanilla"
+  "concise"
+#  "sentence"
+)
+
+BELIEF_SAMPLINGS=(
+  "unbiased"
+)
+
+REASONER_PROMPTS_BELIEF=(
+  "belief"
+  "belief6"
+  "belief7"
+)
+USER_MODEL="gemini-2.5-flash"
+
+
+run_claim_variation() {
+  python pipeline.py \
+    --assistant_model  ${MODEL_NAME} \
+    --judge_model      ${JUDGE_MODEL} \
+    ${DIRECT_PROMPT:+--direct_prompt ${DIRECT_PROMPT}} \
+    ${BELIEF_SAMPLING:+--belief_sampling ${BELIEF_SAMPLING}} \
+    --seed             ${SEED} \
+    --steps            claim_variation \
+    --api_processing   sync \
+    --split            ${SPLIT} \
+    --max_examples     ${MAX_EXAMPLES} \
+    --final_prompt     prompt &
+}
+
+run_interpretation_variation() {
+  python pipeline.py \
+    --assistant_model  ${MODEL_NAME} \
+    --judge_model      ${JUDGE_MODEL} \
+    ${DIRECT_PROMPT:+--direct_prompt ${DIRECT_PROMPT}} \
+    ${BELIEF_SAMPLING:+--belief_sampling ${BELIEF_SAMPLING}} \
+    --seed             ${SEED} \
+    --steps            interpretation_variation \
+    --api_processing   sync \
+    --split            ${SPLIT} \
+    --max_examples     ${MAX_EXAMPLES} \
+    --final_prompt     prompt &
+}
+
+run_claim_variation_final() {
+  python pipeline.py \
+    --assistant_model  ${MODEL_NAME} \
+    --user_model       ${USER_MODEL} \
+    --judge_model      ${JUDGE_MODEL} \
+    ${DIRECT_PROMPT:+--direct_prompt ${DIRECT_PROMPT}} \
+    ${BELIEF_SAMPLING:+--belief_sampling ${BELIEF_SAMPLING}} \
+    --reasoner_prompt  ${REASONER_PROMPT} \
+    --seed             ${SEED} \
+    --steps            claim_variation_final \
+    --max_examples     ${MAX_EXAMPLES} \
+    --api_processing   sync \
+    --split            ${SPLIT} &
+}
+
+for MODEL_NAME in "${MODEL_NAMES[@]}"; do
+  for DIRECT_PROMPT in "${DIRECT_PROMPTS[@]}"; do
+    for BELIEF_SAMPLING in "${BELIEF_SAMPLINGS[@]}"; do
+      run_claim_variation
+      run_interpretation_variation
+      for REASONER_PROMPT in "${REASONER_PROMPTS_BELIEF[@]}"; do
+        run_claim_variation_final
+      done
+    done
+  done
+done
+
+wait
