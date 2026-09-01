@@ -343,9 +343,9 @@
   <button id="intro-close" title="Hide this banner">×</button>
   <p>Interactive demo to browse through data, generations and evaluations from the paper <em>Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</em>.</p>
 
-  <p>Each record shows one <strong>question</strong> and its <strong>references</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a>, the assistant LLM's <strong>belief state</strong> (K sampled candidate answers), the <strong>output</strong> of belief-augmented generation (a strategy, reasoning trace, and response), the resulting potentially multi-turn <strong>conversation</strong> with a simulated user, reference-based LLM-judge verdicts, and <strong>baselines</strong>.</p>
+  <p>Each record shows one <strong>question</strong> and its <strong>references</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a> (📚), the assistant LLM's (🤖) <strong>belief state</strong> (K sampled candidate answers), its augmentation <strong>output</strong> (a strategy, reasoning trace, and response), the resulting potentially multi-turn <strong>conversation</strong> with a simulated user (👤), reference-based LLM-judge verdicts (⚖️), and <strong>direct generation baselines</strong>.</p>
 
-  <p>Pick an <strong>assistant</strong> model, augmentation <strong>method</strong> (SAG is a prompt-only method, BAG1-3 exploit the belief state), and whether to apply them again after clarification in <strong>turn 4</strong>. You can also pick a <strong>brevity</strong>-inducing prompt to shorten generations (and thus also the belief state). &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
+  <p>Pick an assistant model, augmentation method (SAG is a prompt-only method, BAG1-3 exploit the belief state), optionally again for the second assistant turn (turn 4) after clarification. You can also pick a <strong>brevity</strong>-inducing prompt to shorten generations (and thus also the belief state). &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
   &middot; <a href="https://huggingface.co/datasets/jsbaan/bag-paper-data">Data</a></p>
 </div>
 <div id="intro-show" class="hidden"><a>Show intro</a></div>
@@ -355,7 +355,7 @@
   <h1>BAG Visualizer</h1>
 
   <div class="cfg-group" title="Assistant model that generates answers and picks a strategy">
-    <label>Assistant</label>
+    <label>🤖 Assistant</label>
     <select id="sel-model">
       <option>qwen3-14b</option>
       <option>olmo2-13b-instruct</option>
@@ -367,7 +367,7 @@
   </div>
 
   <div class="cfg-group" title="Which method chose the strategy — SAG conditions on the question alone; BAG1/2/3 condition additionally on the K belief-state samples (three prompt variants).">
-    <label>Method</label>
+    <label> Method</label>
     <select id="sel-rp">
       <option value="belief7">BAG3</option>
       <option value="belief6">BAG2</option>
@@ -377,7 +377,7 @@
   </div>
 
   <div class="cfg-group" title="Method used for the assistant's turn-4 answer after the clarification exchange. baseline = forced answer (no abstain). SAG+ = prompt-only, may abstain. BAG+ = re-sample K beliefs then take consensus, may abstain.">
-    <label>Turn 4 method</label>
+    <label> Turn 4 method</label>
     <select id="sel-fp">
       <option value="prompt">baseline</option>
       <option value="prompt1">SAG+</option>
@@ -386,14 +386,14 @@
   </div>
 
   <div class="cfg-group" title="Model that simulates the user's reply to a clarification question, conditioned on a hidden AmbigQA disambiguation">
-    <label>User</label>
+    <label>👤 User</label>
     <select id="sel-um">
       <option>gemini-2.5-flash</option>
     </select>
   </div>
 
   <div class="cfg-group" title="Reference-based LLM judge that scores each generation pass/fail against the AmbigQA references">
-    <label>Judge</label>
+    <label>⚖️ Judge</label>
     <select id="sel-jm">
       <option>gemini-2.5-flash</option>
     </select>
@@ -447,7 +447,7 @@
 
     <!-- Question -->
     <div class="card">
-      <div class="card-header">Question</div>
+      <div class="card-header"><span title="Source: AmbigQA dataset">📚</span> AmbigQA question</div>
       <div class="card-body">
         <div id="question-text"></div>
       </div>
@@ -455,17 +455,17 @@
 
     <!-- Ground truth -->
     <div class="card">
-      <div class="card-header">AmbigQA references</div>
+      <div class="card-header"><span title="Source: AmbigQA dataset">📚</span> AmbigQA references</div>
       <div class="card-body" id="ground-truth-body"></div>
     </div>
 
     <!-- Belief state -->
     <div class="card">
       <div class="card-header">
-        Belief state
+        <span title="Source: assistant model">🤖</span> Belief state
         <button class="toggle-btn" id="belief-toggle">show</button>
         <button class="toggle-btn" id="claim-annotations-toggle" style="margin-left:6px"
-                title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims. Not part of the assistant model's output.">LLM-judge claim annotations: off</button>
+                title="Source: LLM judge — clusters belief samples post-hoc into groups of semantically equivalent claims. Not part of the assistant model's output.">⚖️ claim annotations: off</button>
         <!-- Hidden for the public demo — kept in JS for internal use.
         <button class="toggle-btn" id="interp-badge-toggle" style="margin-left:6px">interps: on</button>
         <button class="toggle-btn" id="judge1-toggle" style="margin-left:6px">1-intent: off</button>
@@ -473,13 +473,13 @@
         -->
         <span id="belief-counts" style="font-size:11px;color:#aaa;margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0"></span>
       </div>
-      <div class="card-body" id="belief-body" class="hidden"></div>
+      <div class="card-body" id="belief-body" style="display:none"></div>
     </div>
 
     <!-- Strategy -->
     <div class="card">
       <div class="card-header">
-        BAG output
+        <span title="Source: assistant model (reasoner)">🤖</span> Augmentation output
         <span id="strategy-badge"></span>
         <button class="toggle-btn" id="raw-output-toggle" style="margin-left:auto">show raw</button>
       </div>
@@ -489,14 +489,22 @@
     <!-- Conversation -->
     <div class="card" id="conv-card">
       <div class="card-header">Full conversation with a simulated user</div>
-      <div class="judge-note">Pass/fail verdicts and reasoning are from a reference-based LLM judge (gemini-2.5-flash).</div>
       <div class="card-body" id="conv-body"></div>
+    </div>
+
+    <!-- Turn 4 intermediate belief state (BAG+) -->
+    <div class="card">
+      <div class="card-header">
+        <span title="Source: assistant model, only when Turn 4 method = BAG+">🤖</span> Turn 4 augmentation
+        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#aaa">(optional)</span>
+        <button class="toggle-btn" id="final-belief-toggle" style="margin-left:auto">show</button>
+      </div>
+      <div class="card-body" id="final-belief-body" style="display:none"></div>
     </div>
 
     <!-- Baselines -->
     <div class="card">
-      <div class="card-header">Baselines — direct answer and oracle-disambiguated answer</div>
-      <div class="judge-note">Pass/fail verdicts and reasoning are from a reference-based LLM judge (gemini-2.5-flash).</div>
+      <div class="card-header">Direct generation (no augmentation method)</div>
       <div class="card-body" id="baselines-body"></div>
     </div>
 
@@ -557,6 +565,8 @@ function buildFnames({ assistant_model: am, direct_prompt: dp, reasoner_prompt: 
     judge_final:   `judge_final_${am}_${jm}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
     claim_var:     `claim_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
     interp_var:    `interpretation_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    // Turn-4 (BAG+) belief-state claim clusters — only meaningful when final_prompt='belief'.
+    claim_var_final: `claim_variation_final_${am}_${um}_${jm}${downDp}_${seed}_${rp}.jsonl`,
   };
 }
 
@@ -599,7 +609,7 @@ async function loadData() {
   console.log('Loading files:', fnames);
 
   try {
-    const [direct, disamb, clarify, user, final, jDirect, jBelief, jDisamb, jClarify, jFinal, claimVar, interpVar] = await Promise.all([
+    const [direct, disamb, clarify, user, final, jDirect, jBelief, jDisamb, jClarify, jFinal, claimVar, interpVar, claimVarFinal] = await Promise.all([
       loadJsonl(base + fnames.direct),
       loadJsonl(base + fnames.disambiguated),
       loadJsonl(base + fnames.clarify),
@@ -612,6 +622,7 @@ async function loadData() {
       loadJsonl(base + fnames.judge_final),
       loadJsonl(base + fnames.claim_var),
       loadJsonl(base + fnames.interp_var),
+      loadJsonl(base + fnames.claim_var_final),
     ]);
 
     // Index secondary files by id for O(1) lookup
@@ -627,6 +638,7 @@ async function loadData() {
     const jfById      = byId(jFinal);
     const cvById      = byId(claimVar);
     const ivById      = byId(interpVar);
+    const cvfById     = byId(claimVarFinal);
 
     // Build joined records in order of the direct file
     records = direct.map(d => ({
@@ -641,6 +653,7 @@ async function loadData() {
       jDisamb:  jdbById[d.id]     || null,
       jClarify: jcById[d.id]      || null,
       jFinal:   jfById[d.id]      || null,
+      cvFinal:  cvfById[d.id]     || null,
       claimVar: cvById[d.id]      || null,
       interpVar: ivById[d.id]     || null,
     }));
@@ -688,6 +701,7 @@ function render() {
   renderBeliefState(rec);
   renderStrategy(rec);
   renderConversation(rec);
+  renderFinalBeliefState(rec);
   renderBaselines(rec);
 }
 
@@ -781,6 +795,13 @@ document.getElementById('belief-toggle').addEventListener('click', () => {
   document.getElementById('belief-toggle').textContent = beliefVisible ? 'hide' : 'show';
 });
 
+let finalBeliefVisible = false;
+document.getElementById('final-belief-toggle').addEventListener('click', () => {
+  finalBeliefVisible = !finalBeliefVisible;
+  document.getElementById('final-belief-body').style.display = finalBeliefVisible ? '' : 'none';
+  document.getElementById('final-belief-toggle').textContent = finalBeliefVisible ? 'hide' : 'show';
+});
+
 // Single "claim annotations" toggle controls both sample-background colors
 // and the per-sample C:label badges — they're two views of the same info.
 let claimAnnotationsVisible = false;
@@ -802,7 +823,7 @@ document.getElementById('claim-annotations-toggle').addEventListener('click', ()
   claimColorVisible = claimAnnotationsVisible;
   claimBadgeVisible = claimAnnotationsVisible;
   document.getElementById('claim-annotations-toggle').textContent =
-    claimAnnotationsVisible ? 'LLM-judge claim annotations: on' : 'LLM-judge claim annotations: off';
+    claimAnnotationsVisible ? '⚖️ claim annotations: on' : '⚖️ claim annotations: off';
   applyClaimColors();
   applyClaimBadges();
 });
@@ -903,7 +924,7 @@ function renderBeliefState(rec) {
           const col = claimColor(c.label);
           return `<span class="legend-chip" style="background:${col.bg};color:${col.fg};border-color:${col.border}">${esc(c.label)}: ${esc(c.representative)} (n=${c.n_samples})</span>`;
         }).join('');
-        legendHtml += `<div class="legend-section"><span class="legend-title" title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims.">LLM-judge claims</span>${chips}</div>`;
+        legendHtml += `<div class="legend-section"><span class="legend-title" title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims.">⚖️ claims</span>${chips}</div>`;
       }
       // Interps legend hidden from the public demo — kept in `iv` for internal use.
       legendHtml += '</div>';
@@ -957,6 +978,81 @@ function renderBeliefState(rec) {
   // Respect persistent visibility state (don't reset on navigation)
   el.style.display = beliefVisible ? '' : 'none';
   document.getElementById('belief-toggle').textContent = beliefVisible ? 'hide' : 'show';
+}
+
+// ── Turn 4 intermediate belief state (BAG+) ─────────────────────────────────
+// Only populated when final_prompt='belief': generate_final_answer.py resamples
+// K new candidates conditioned on the conversation and stores them as a flat
+// array of raw strings at the top level (rec.final.belief_state), unlike the
+// turn-1 belief state (array of {response, raw_response} dicts). Per-sample
+// judge verdicts aren't computed for this step, only claim clustering.
+function renderFinalBeliefState(rec) {
+  const el = document.getElementById('final-belief-body');
+  const samples = rec.final?.belief_state || null;
+
+  if (!samples || samples.length === 0) {
+    el.innerHTML = '<em style="color:#888">No turn-4 output — only populated when Turn 4 method = BAG+ and this record was clarified.</em>';
+  } else {
+    // Turn-4 augmentation output: the reasoner's answer/abstain decision over the belief state below.
+    // Rendered the same way as the turn-1 Augmentation output card (badge + parsed-block).
+    const gen = rec.final?.generations || {};
+    const strategy = gen.strategy || '';
+    let badgeClass = 'badge-direct', badgeLabel = 'direct answer';
+    if (strategy.includes('abstain')) { badgeClass = 'badge-abstain'; badgeLabel = 'abstain'; }
+    const jf = rec.jFinal?.generations?.final;
+    const judgeHtml = jf ? judgeBlock(jf, rec.jFinal?.context?.final_ref || null) : '';
+
+    let outputHtml = `<span class="strategy-badge ${badgeClass}">${esc(badgeLabel)}</span>`;
+    const parsedBits = [];
+    if (strategy)      parsedBits.push(`<div class="reasoning-text"><strong>Strategy:</strong> ${esc(strategy)}</div>`);
+    if (gen.reasoning) parsedBits.push(`<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(gen.reasoning)}</div>`);
+    if (gen.response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${esc(gen.response)}</div>`);
+    if (parsedBits.length) outputHtml += `<div class="parsed-block" style="margin-top:10px;">${parsedBits.join('')}</div>`;
+    outputHtml += judgeHtml;
+    outputHtml += `<div class="separator"></div>`;
+    outputHtml += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#666;margin-bottom:6px;">🤖 resampled belief state (K=${samples.length})</div>`;
+
+    const cv = rec.cvFinal?.generations?.claim_variation || null;
+
+    // Build lookup: 1-based sample index → claim info (same convention as turn-1)
+    const claimByIdx = {};
+    if (cv?.claims) {
+      for (const claim of cv.claims) {
+        for (const idx of claim.sample_indices) claimByIdx[idx] = { label: claim.label };
+      }
+    }
+
+    let legendHtml = '';
+    if (cv?.claims) {
+      const chips = cv.claims.map(c => {
+        const col = claimColor(c.label);
+        return `<span class="legend-chip" style="background:${col.bg};color:${col.fg};border-color:${col.border}">${esc(c.label)}: ${esc(c.representative)} (n=${c.n_samples})</span>`;
+      }).join('');
+      legendHtml = `<div class="belief-legend"><div class="legend-section"><span class="legend-title" title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims.">⚖️ claims</span>${chips}</div></div>`;
+    }
+
+    const gridHtml = samples.map((text, i) => {
+      const sampleIdx = i + 1;  // convert 0-based array index to 1-based sample number
+      const claim = claimByIdx[sampleIdx];
+      let badge = '';
+      if (claim) {
+        const col = claimColor(claim.label);
+        badge = `<span class="group-badge" style="background:${col.bg};color:${col.fg};border-color:${col.border}">C:${esc(claim.label)}</span>`;
+      }
+      return `<div class="belief-sample">
+        <div class="belief-sample-header">
+          <span class="belief-num">${sampleIdx}.</span>${badge}
+        </div>
+        <div class="belief-sample-text">${esc(text)}</div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = outputHtml + legendHtml + `<div class="belief-grid">${gridHtml}</div>`;
+  }
+
+  // Respect persistent visibility state (don't reset on navigation)
+  el.style.display = finalBeliefVisible ? '' : 'none';
+  document.getElementById('final-belief-toggle').textContent = finalBeliefVisible ? 'hide' : 'show';
 }
 
 // ── Strategy ──────────────────────────────────────────────────────────────
@@ -1047,7 +1143,7 @@ function renderConversation(rec) {
 
   // Every branch starts with the original ambiguous user question.
   if (originalQuestion) {
-    html += convTurn('user', '👤', 'User question (from AmbigQA)', null, originalQuestion);
+    html += convTurn('user', '👤', 'User question', null, originalQuestion);
   }
 
   if (strategy.includes('clarification')) {
@@ -1072,7 +1168,7 @@ function renderConversation(rec) {
       if (st.includes('abstain')) {
         finalBadge = `<span class="strategy-badge badge-abstain">abstain</span>`;
       } else if (st) {
-        finalBadge = `<span class="strategy-badge badge-direct">answer</span>`;
+        finalBadge = `<span class="strategy-badge badge-direct">direct answer</span>`;
       }
     }
     const jf = jFinal?.generations?.final;
@@ -1084,7 +1180,7 @@ function renderConversation(rec) {
     const response = clarify?.generations?.response || '';
     const jc = rec.jClarify?.generations?.reason_direct;
     const judgeHtml = jc ? judgeBlock(jc, rec.jClarify?.context?.direct_ref || null) : '';
-    html += convTurn('assistant', '🤖', 'Direct answer (no clarification)', null, response, judgeHtml);
+    html += convTurn('assistant', '🤖', 'Direct answer', null, response, judgeHtml);
 
   } else if (strategy.includes('abstain')) {
     const response = clarify?.generations?.response || '';
@@ -1118,14 +1214,15 @@ function judgeBlock(j, ref) {
   const verdict = j.verdict;
   const reason  = j.reasoning || '';
   const badgeHtml = verdict === 1
-    ? `<span class="verdict-pass">✓ pass</span>`
+    ? `<span class="verdict-pass" title="Source: LLM judge">⚖️ ✓ pass</span>`
     : verdict === 0
-      ? `<span class="verdict-fail">✗ fail</span>`
-      : `<span class="verdict-null">– no judge</span>`;
+      ? `<span class="verdict-fail" title="Source: LLM judge">⚖️ ✗ fail</span>`
+      : `<span class="verdict-null" title="Source: LLM judge">⚖️ – no judge</span>`;
   const refHtml = ref != null
     ? `<span class="judge-ref" title="${esc(ref)}">${ref === 'any' ? 'any ref' : esc(ref)}</span>`
     : '';
-  return `<div class="judge-row">${badgeHtml}${refHtml}<span class="judge-reason">${esc(reason)}</span></div>`;
+  const reasonHtml = reason ? `<span class="judge-reason">Judge: ${esc(reason)}</span>` : '';
+  return `<div class="judge-row">${badgeHtml}${refHtml}${reasonHtml}</div>`;
 }
 
 // ── Baselines ─────────────────────────────────────────────────────────────
@@ -1138,7 +1235,7 @@ function renderBaselines(rec) {
   const jd    = rec.jDirect?.generations?.direct;
   const jdAny = rec.jDirect?.generations?.direct_anyref;
   if (directSampled) {
-    html += `<div class="baseline-label">Direct answer (sampled)</div>`;
+    html += `<div class="baseline-label">🤖 Direct generation</div>`;
     html += `<div class="baseline-text">${esc(directSampled)}</div>`;
     if (jd)    html += judgeBlock(jd,    rec.jDirect?.context?.direct_ref || null);
     if (jdAny) html += judgeBlock(jdAny, 'any');
@@ -1146,26 +1243,26 @@ function renderBaselines(rec) {
 
   // Belief state any-ref coverage
   // For non-ambiguous questions belief_anyref is null (only 1 ref), fall back to belief
-  const jbAny = rec.jBelief?.generations?.belief_anyref ?? rec.jBelief?.generations?.belief;
-  if (jbAny) {
-    html += `<div class="separator"></div>`;
-    html += `<div class="baseline-label">Belief state (any-ref coverage)</div>`;
-    html += judgeBlock(jbAny, 'any');
-
-    // Show a passing sample's generation + judge reasoning (if any)
-    const beliefSamples = rec.direct?.generations?.belief_state || [];
-    const jbSamples = jbAny.samples || [];
-    const passingIdx = jbSamples.findIndex(s => s.verdict === 1);
-    if (passingIdx !== -1 && beliefSamples[passingIdx]) {
-      const gen = beliefSamples[passingIdx].raw_response || beliefSamples[passingIdx].response || '';
-      const reasoning = jbSamples[passingIdx].reasoning || '';
-      html += `<div style="margin-top:8px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:4px;">Passing generation (sample ${passingIdx + 1})</div>`;
-      html += `<div class="baseline-text" style="font-size:12px;">${esc(gen)}</div>`;
-      if (reasoning) {
-        html += `<div class="conv-reasoning" style="margin-top:4px;">Judge: ${esc(reasoning)}</div>`;
-      }
-    }
-  }
+  // const jbAny = rec.jBelief?.generations?.belief_anyref ?? rec.jBelief?.generations?.belief;
+  // if (jbAny) {
+  //   html += `<div class="separator"></div>`;
+  //   html += `<div class="baseline-label">🤖 Belief state any-ref coverage</div>`;
+  //   html += judgeBlock(jbAny, 'any');
+  //
+  //   // Show a passing sample's generation + judge reasoning (if any)
+  //   const beliefSamples = rec.direct?.generations?.belief_state || [];
+  //   const jbSamples = jbAny.samples || [];
+  //   const passingIdx = jbSamples.findIndex(s => s.verdict === 1);
+  //   if (passingIdx !== -1 && beliefSamples[passingIdx]) {
+  //     const gen = beliefSamples[passingIdx].raw_response || beliefSamples[passingIdx].response || '';
+  //     const reasoning = jbSamples[passingIdx].reasoning || '';
+  //     html += `<div style="margin-top:8px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:4px;">Passing generation (sample ${passingIdx + 1})</div>`;
+  //     html += `<div class="baseline-text" style="font-size:12px;">${esc(gen)}</div>`;
+  //     if (reasoning) {
+  //       html += `<div class="conv-reasoning" style="margin-top:4px;">Judge: ${esc(reasoning)}</div>`;
+  //     }
+  //   }
+  // }
 
   // Disambiguated
   const disamb = rec.disamb;
@@ -1176,8 +1273,8 @@ function renderBaselines(rec) {
     const jdb    = rec.jDisamb?.generations?.disambig;
     const jdbAny = rec.jDisamb?.generations?.disambig_anyref;
     html += `<div class="separator"></div>`;
-    html += `<div class="baseline-label">Disambiguated answer</div>`;
-    if (dq) html += `<div style="font-size:12px;color:#666;margin-bottom:4px;font-style:italic">For: "${esc(dq)}" — ref: <strong>${esc(ref)}</strong></div>`;
+    html += `<div class="baseline-label">🤖 Direct generation based on oracle disambiguated question</div>`;
+    if (dq) html += `<div style="font-size:13px;color:#444;margin-bottom:6px;">📚 <strong>AmbigQA disambiguated question:</strong> "${esc(dq)}" <span style="color:#888;font-size:12px;">(ref: ${esc(ref)})</span></div>`;
     html += `<div class="baseline-text">${esc(ans)}</div>`;
     if (jdb)    html += judgeBlock(jdb,    rec.jDisamb?.context?.disambig_ref || null);
     if (jdbAny) html += judgeBlock(jdbAny, 'any');
