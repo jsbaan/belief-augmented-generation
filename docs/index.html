@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>BAG Pipeline Visualizer</title>
+<title>BAG Visualizer</title>
 <!--    python -m http.server 8000 -->
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -341,23 +341,21 @@
 <!-- ── Intro banner ── -->
 <div id="intro">
   <button id="intro-close" title="Hide this banner">×</button>
-  <p>Interactive demo for the paper <em>Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</em> (INLG 2026).
-  Each record shows one <strong>question</strong> and its <strong>references</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a>, the assistant LLM's
-  <strong>belief state</strong> (K sampled candidate answers) and the output of belief-augmented generation (<strong>BAG's output</strong>: K
-  strategy: direct / clarify / abstain; reasoning; response), the potentially multi-turn <strong>conversation</strong> with a simulated user, reference-based LLM-judge verdicts, and <strong>baselines</strong>.</p>
+  <p>Interactive demo for the paper <em>Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</em>.</p>
 
-    <p>Pick an assistant <strong>model</strong> and augmentation <strong>method</strong>: SAG is a prompt-only method, BAG1-3 exploit the belief state with slightly different instructions. You can also pick a <strong>brevity</strong>-inducing prompt to shorten generations, and apply SAG+ or BAG+ in <strong>Turn 4 </strong> after clarification.
-  &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
+  <p>Each record shows one <strong>question</strong> and its <strong>references</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a>, the assistant LLM's <strong>belief state</strong> (K sampled candidate answers), the <strong>output</strong> of belief-augmented generation (a strategy, reasoning trace, and response), the resulting potentially multi-turn <strong>conversation</strong> with a simulated user, reference-based LLM-judge verdicts, and <strong>baselines</strong>.</p>
+
+  <p>Pick an <strong>assistant</strong> model, augmentation <strong>method</strong> (SAG is a prompt-only method, BAG1-3 exploit the belief state), and whether to apply them again after clarification in <strong>turn 4</strong>. You can also pick a <strong>brevity</strong>-inducing prompt to shorten generations (and thus also the belief state). &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
   &middot; <a href="https://huggingface.co/datasets/jsbaan/bag-paper-data">Data</a></p>
 </div>
 <div id="intro-show" class="hidden"><a>Show intro</a></div>
 
 <!-- ── Top bar ── -->
 <div id="topbar">
-  <h1>BAG Pipeline Visualizer</h1>
+  <h1>BAG Visualizer</h1>
 
   <div class="cfg-group" title="Assistant model that generates answers and picks a strategy">
-    <label>Model</label>
+    <label>Assistant</label>
     <select id="sel-model">
       <option>qwen3-14b</option>
       <option>olmo2-13b-instruct</option>
@@ -365,15 +363,6 @@
       <option>olmo3-7b-instruct</option>
       <option>qwen3-8b</option>
       <option>gemini-2.5-flash</option>
-    </select>
-  </div>
-
-  <div class="cfg-group" title="Brevity instruction for the direct answer step (free = no instruction, concise = 'be concise', sentence = 'answer in one sentence')">
-    <label>Brevity</label>
-    <select id="sel-dp">
-      <option value="vanilla">free</option>
-      <option value="concise">concise</option>
-      <option value="sentence">sentence</option>
     </select>
   </div>
 
@@ -387,23 +376,8 @@
     </select>
   </div>
 
-  <div class="cfg-group" title="Random seed used for generation">
-    <label>Seed</label>
-    <select id="sel-seed">
-      <option>50</option>
-      <option>42</option>
-    </select>
-  </div>
-
-  <div class="cfg-group" title="Model that simulates the user's reply to a clarification question, conditioned on a hidden AmbigQA disambiguation">
-    <label>User model</label>
-    <select id="sel-um">
-      <option>gemini-2.5-flash</option>
-    </select>
-  </div>
-
   <div class="cfg-group" title="Method used for the assistant's turn-4 answer after the clarification exchange. baseline = forced answer (no abstain). SAG+ = prompt-only, may abstain. BAG+ = re-sample K beliefs then take consensus, may abstain.">
-    <label>Turn 4</label>
+    <label>Turn 4 method</label>
     <select id="sel-fp">
       <option value="prompt">baseline</option>
       <option value="prompt1">SAG+</option>
@@ -411,10 +385,34 @@
     </select>
   </div>
 
+  <div class="cfg-group" title="Model that simulates the user's reply to a clarification question, conditioned on a hidden AmbigQA disambiguation">
+    <label>User</label>
+    <select id="sel-um">
+      <option>gemini-2.5-flash</option>
+    </select>
+  </div>
+
   <div class="cfg-group" title="Reference-based LLM judge that scores each generation pass/fail against the AmbigQA references">
-    <label>Judge model</label>
+    <label>Judge</label>
     <select id="sel-jm">
       <option>gemini-2.5-flash</option>
+    </select>
+  </div>
+
+  <div class="cfg-group" title="Brevity instruction for the direct answer step (free = no instruction, concise = 'be concise', sentence = 'answer in one sentence')">
+    <label>Brevity</label>
+    <select id="sel-dp">
+      <option value="vanilla">free</option>
+      <option value="concise">concise</option>
+      <option value="sentence">sentence</option>
+    </select>
+  </div>
+
+  <div class="cfg-group" title="Random seed used for generation">
+    <label>Seed</label>
+    <select id="sel-seed">
+      <option>50</option>
+      <option>42</option>
     </select>
   </div>
 
