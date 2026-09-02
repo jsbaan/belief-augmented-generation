@@ -1,10 +1,10 @@
 # Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation
 
-Code for the paper: [Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation](https://arxiv.org/pdf/2605.25831) to appear at INLG 2026.
+This repo contains code for the paper: [Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation](https://arxiv.org/pdf/2605.25831) (to appear at INLG 2026).
+
+🖥️️ **[BAG Explorer](https://jsbaan.github.io/belief-augmented-generation/)** - we also release an online tool to interactively explore the paper's questions, generations, belief samples, judgments, and evaluations.
 
 Please consider citing us if you find this project useful.
-
-🔗 **[Interactive demo](https://jsbaan.github.io/belief-augmented-generation/)** — browse the paper's questions, generations, belief samples, judgments, and evaluations.
 
 ![](BAG1.png)
 

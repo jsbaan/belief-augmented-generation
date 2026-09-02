@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>BAG Visualizer</title>
+<title>BAG Explorer</title>
 <!--    python -m http.server 8000 -->
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -341,7 +341,7 @@
 <!-- ── Intro banner ── -->
 <div id="intro">
   <button id="intro-close" title="Hide this banner">×</button>
-  <p>Interactive demo to browse through data, generations and evaluations from the paper <a href="https://arxiv.org/pdf/2605.25831">Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</a>  &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
+  <p>Interactive explorer to browse through data, generations and evaluations from the paper <a href="https://arxiv.org/pdf/2605.25831">Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</a>  &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
   &middot; <a href="https://huggingface.co/datasets/jsbaan/bag-paper-data">Data</a>.</p>
 
   <p>Each record shows one <strong>question</strong> and its <strong>reference(s)</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a> (📚), the assistant LLM's (🤖) <strong>belief state</strong> (K sampled candidate answers), its augmentation <strong>output</strong> (a strategy, reasoning trace, and response), the resulting potentially multi-turn <strong>conversation</strong> with a simulated user (👤), reference-based LLM-judge verdicts (⚖️), and <strong>direct generation baselines</strong>.</p>
@@ -352,7 +352,7 @@
 
 <!-- ── Top bar ── -->
 <div id="topbar">
-  <h1>BAG Visualizer</h1>
+  <h1>BAG Explorer</h1>
 
   <div class="cfg-group" title="Assistant model that generates answers and picks a strategy">
     <label>🤖 Assistant</label>
@@ -439,8 +439,6 @@
 <div id="main">
   <div id="placeholder">
     <h2>Select a config and click Load</h2>
-    <p>Serve from project root: <code>python3 -m http.server 8080</code><br>
-    then open <code>http://localhost:8080/visualiser/pipeline.html</code></p>
   </div>
 
   <div id="record-view" class="hidden">
@@ -757,16 +755,36 @@ function renderGroundTruth(rec) {
 }
 
 // ── Belief state ──────────────────────────────────────────────────────────
-// Colors for claim groups A–E, plus a fallback
+// Colors for claim groups A–Z, plus a fallback for anything else
 const CLAIM_COLORS = {
   A: { bg: '#dbeafe', fg: '#1d4ed8', border: '#93c5fd' },
   B: { bg: '#dcfce7', fg: '#15803d', border: '#86efac' },
   C: { bg: '#fef9c3', fg: '#854d0e', border: '#fde68a' },
   D: { bg: '#fce7f3', fg: '#9d174d', border: '#f9a8d4' },
   E: { bg: '#e0e7ff', fg: '#4338ca', border: '#a5b4fc' },
+  F: { bg: '#ffedd5', fg: '#9a3412', border: '#fdba74' },
+  G: { bg: '#ccfbf1', fg: '#0f766e', border: '#5eead4' },
+  H: { bg: '#cffafe', fg: '#155e75', border: '#67e8f9' },
+  I: { bg: '#fae8ff', fg: '#86198f', border: '#f0abfc' },
+  J: { bg: '#ecfccb', fg: '#3f6212', border: '#bef264' },
   _: { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },
 };
-function claimColor(label) { return CLAIM_COLORS[label] || CLAIM_COLORS['_']; }
+// Beyond J, generate distinct hues on the fly instead of falling back to gray.
+function claimColor(label) {
+  if (CLAIM_COLORS[label]) return CLAIM_COLORS[label];
+  if (typeof label === 'string' && label.length === 1) {
+    const idx = label.toUpperCase().charCodeAt(0) - 65; // A=0
+    if (idx >= 0 && idx < 26) {
+      const hue = (idx * 137.508) % 360; // golden-angle spread → visually distinct hues
+      return {
+        bg: `hsl(${hue}, 70%, 92%)`,
+        fg: `hsl(${hue}, 70%, 30%)`,
+        border: `hsl(${hue}, 70%, 78%)`,
+      };
+    }
+  }
+  return CLAIM_COLORS['_'];
+}
 
 // Colors for interpretation groups A–E (teal, purple, amber, lime, slate) — old train format
 const INTERP_COLORS = {
