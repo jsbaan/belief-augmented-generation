@@ -1099,9 +1099,58 @@ async function loadJsonl(path) {
   return text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 }
 
+// Prefer the trimmed copy shipped with the site (docs/data/, built by
+// build_demo_data.py: same records, only the fields shown here, served gzipped),
+// and fall back to the full file on Hugging Face if there is none.
+async function loadDemoFile(localBase, remoteBase, fname) {
+  try {
+    const resp = await fetch(localBase + fname.replace(/\.jsonl$/, '.json'));
+    if (resp.ok) {
+      const text = await resp.text();
+      return text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    }
+  } catch (e) { /* fall through to Hugging Face */ }
+  return loadJsonl(remoteBase + fname);
+}
+
 // ── State ─────────────────────────────────────────────────────────────────
 let records = [];  // joined records, ordered as in direct file
 let idx = 0;
+
+// ── Shareable links ───────────────────────────────────────────────────────
+// The URL mirrors the current config and record, e.g.
+//   ?model=qwen3-14b&method=BAG3&turn4=BAG%2B&id=3312525434538504362
+// Values match either a <select> option's value or its label.
+const URL_PARAMS = {
+  model: 'sel-model', method: 'sel-rp', turn4: 'sel-fp', user: 'sel-um',
+  judge: 'sel-jm', brevity: 'sel-dp', seed: 'sel-seed', split: 'sel-split',
+};
+let pendingId = null;  // record to show after the next load (from the URL or the previous config)
+
+function applyUrlParams() {
+  let params;
+  try { params = new URLSearchParams(window.location.search); } catch { return; }
+  for (const [key, selId] of Object.entries(URL_PARAMS)) {
+    const want = params.get(key);
+    if (want == null) continue;
+    const sel = document.getElementById(selId);
+    const opt = [...sel.options].find(o => o.value === want || o.text === want);
+    if (opt) sel.value = opt.value;
+  }
+  pendingId = params.get('id');
+}
+
+function updateUrl() {
+  try {
+    const params = new URLSearchParams();
+    for (const [key, selId] of Object.entries(URL_PARAMS)) {
+      const sel = document.getElementById(selId);
+      params.set(key, sel.options[sel.selectedIndex].text);
+    }
+    if (records[idx]) params.set('id', records[idx].id);
+    history.replaceState(null, '', '?' + params.toString());
+  } catch { /* e.g. unsupported in some sandboxes — the page works without it */ }
+}
 
 // ── Load ──────────────────────────────────────────────────────────────────
 document.getElementById('load-btn').addEventListener('click', loadData);
@@ -1117,6 +1166,9 @@ async function loadData() {
     final_prompt:    document.getElementById('sel-fp').value,
   };
 
+  // Stay on the same question when switching configs.
+  if (pendingId == null && records[idx]) pendingId = records[idx].id;
+
   setStatus('Loading…');
   document.getElementById('load-btn').disabled = true;
 
@@ -1125,25 +1177,27 @@ async function loadData() {
   // const base = split === 'train' ? '../data/generations/' : `../data/generations/${split}/`;
   const HF_BASE = 'https://huggingface.co/datasets/jsbaan/bag-paper-data/resolve/main/';
   const base = split === 'train' ? HF_BASE : `${HF_BASE}${split}/`;
+  const localBase = `data/${split}/`;
+  const load = fname => loadDemoFile(localBase, base, fname);
 
   const fnames = buildFnames(cfg);
   console.log('Loading files:', fnames);
 
   try {
     const [direct, disamb, clarify, user, final, jDirect, jBelief, jDisamb, jClarify, jFinal, claimVar, interpVar, claimVarFinal] = await Promise.all([
-      loadJsonl(base + fnames.direct),
-      loadJsonl(base + fnames.disambiguated),
-      loadJsonl(base + fnames.clarify),
-      loadJsonl(base + fnames.user),
-      loadJsonl(base + fnames.final),
-      loadJsonl(base + fnames.judge_direct),
-      loadJsonl(base + fnames.judge_belief),
-      loadJsonl(base + fnames.judge_disambig),
-      loadJsonl(base + fnames.judge_clarify),
-      loadJsonl(base + fnames.judge_final),
-      loadJsonl(base + fnames.claim_var),
-      loadJsonl(base + fnames.interp_var),
-      loadJsonl(base + fnames.claim_var_final),
+      load(fnames.direct),
+      load(fnames.disambiguated),
+      load(fnames.clarify),
+      load(fnames.user),
+      load(fnames.final),
+      load(fnames.judge_direct),
+      load(fnames.judge_belief),
+      load(fnames.judge_disambig),
+      load(fnames.judge_clarify),
+      load(fnames.judge_final),
+      load(fnames.claim_var),
+      load(fnames.interp_var),
+      load(fnames.claim_var_final),
     ]);
 
     // Index secondary files by id for O(1) lookup
@@ -1181,10 +1235,13 @@ async function loadData() {
 
     if (records.length === 0) {
       setStatus('No records found — check console for missing files');
+      document.getElementById('load-btn').disabled = false;
       return;
     }
 
-    idx = 0;
+    const keep = pendingId != null ? records.findIndex(r => String(r.id) === String(pendingId)) : -1;
+    idx = keep >= 0 ? keep : 0;
+    pendingId = null;
     document.getElementById('placeholder').classList.add('hidden');
     document.getElementById('record-view').classList.remove('hidden');
     render();
@@ -1213,6 +1270,8 @@ function render() {
   document.getElementById('record-info').textContent = `Record ${idx + 1} / ${records.length}`;
   document.getElementById('prev-btn').disabled = idx === 0;
   document.getElementById('next-btn').disabled = idx === records.length - 1;
+
+  updateUrl();
 
   // scroll to top
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1834,7 +1893,8 @@ function renderBaselines(rec) {
   el.innerHTML = html || '<em style="color:#888">No baseline data</em>';
 }
 
-// Load the default config right away so there's something to look at.
+// Load the config from the link (or the default) right away so there's something to look at.
+applyUrlParams();
 loadData();
 
 // ── Utility ───────────────────────────────────────────────────────────────
