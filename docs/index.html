@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BAG Explorer</title>
 <!--    python -m http.server 8000 -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
+<!--
+  Two stylesheets. The first is the classic look; the second (modern: serif reading
+  text, chat bubbles, larger type) is layered on top only where its `media`
+  attribute matches. To switch:
+    media="(max-width: 640px)"  -> modern on phones, classic on desktop (default)
+    media="all"                 -> modern everywhere
+    media="not all"             -> classic everywhere
+-->
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -125,7 +137,7 @@
   }
   .belief-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
     gap: 8px;
     margin-top: 10px;
   }
@@ -334,6 +346,515 @@
     margin-top: 4px;
     padding-top: 8px;
   }
+
+  /* ── Centered layout: intro, config bar, nav bar and cards share one column ── */
+  #intro, #intro-show, #topbar, #navbar {
+    width: min(920px, 100% - 40px);
+    margin-left: auto;
+    margin-right: auto;
+  }
+  #intro { max-width: none; }
+  #intro-show { max-width: none; padding-left: 0; padding-right: 0; }
+  #topbar { margin-top: 16px; border-radius: 10px; }
+  #navbar {
+    top: 8px; margin-top: 10px;
+    border: 1px solid #e0e0e0; border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(20, 30, 60, .06);
+  }
+  #main { margin-top: 16px; }
+
+  /* ── Rendered markdown in model outputs ── */
+  .md > :first-child { margin-top: 0; }
+  .md > :last-child { margin-bottom: 0; }
+  .md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 .6em; }
+  .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-size: 1.05em; font-weight: 700; margin: .9em 0 .35em; line-height: 1.35; }
+  .md ul, .md ol { padding-left: 1.4em; }
+  .md li { margin: .15em 0; }
+  .md li > ul, .md li > ol { margin: .15em 0 0; }
+  .md code { font-family: "SF Mono", "Fira Code", monospace; font-size: .9em; background: rgba(0,0,0,.05); padding: 0 .3em; border-radius: 3px; }
+  .md pre { background: rgba(0,0,0,.05); padding: .6em .8em; border-radius: 5px; overflow-x: auto; }
+  .md pre code { background: none; padding: 0; }
+  .md blockquote { border-left: 3px solid #ddd; padding-left: .8em; color: #555; }
+  .md hr { border: none; border-top: 1px solid #e5e5e5; margin: .8em 0; }
+  .md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+  .md th, .md td { border: 1px solid #e0e0e0; padding: .25em .5em; text-align: left; }
+  .md a { color: #1d4ed8; }
+  /* "Response:" label stays on the same line as the first paragraph */
+  .reasoning-text > .md, .reasoning-text > .md > p:first-child { display: inline; }
+
+  /* ── Conversation as a chat: user on the right, assistant on the left ── */
+  .conv-turn:has(.icon-user) { flex-direction: row-reverse; padding-left: 10%; }
+  .conv-turn:has(.icon-assistant) { padding-right: 10%; }
+  .conv-turn:has(.icon-user) .conv-role { text-align: right; }
+  .conv-content { min-width: 0; }
+  .conv-icon { margin-top: 18px; }
+  .conv-text { border-radius: 3px 12px 12px 12px; }
+  .conv-turn:has(.icon-user) .conv-text {
+    background: #f8f3fe;
+    border-color: #ebdffb;
+    border-radius: 12px 3px 12px 12px;
+  }
+
+  /* ── Small screens (fallback; the modern sheet below takes over here) ── */
+  @media (max-width: 640px) {
+    #intro, #intro-show, #topbar, #navbar { width: calc(100% - 24px); }
+    #intro { margin-top: 12px; padding: 12px 40px 12px 14px; font-size: 12.5px; }
+    #topbar { padding: 10px 12px; gap: 8px 12px; }
+    #topbar h1 { width: 100%; }
+    .cfg-group { flex: 1 1 calc(50% - 6px); min-width: 0; flex-direction: column; align-items: stretch; gap: 2px; }
+    #topbar select { width: 100%; font-size: 16px; padding: 6px 8px; }
+    #topbar button { width: 100%; padding: 8px 14px; font-size: 14px; }
+    #navbar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; top: 6px; }
+    #status { width: 100%; margin-left: 0; }
+    #main { margin: 12px auto; padding: 0 12px 40px; gap: 12px; }
+    .card-header { flex-wrap: wrap; }
+    .card-body { padding: 12px; }
+    .conv-turn:has(.icon-user) { padding-left: 0; }
+    .conv-turn:has(.icon-assistant) { padding-right: 0; }
+  }
+</style>
+<style media="(max-width: 640px)">
+  :root {
+    --bg: #eef1f5;
+    --surface: #ffffff;
+    --surface-2: #f6f8fb;
+    --ink: #18202e;
+    --ink-2: #455064;
+    --muted: #788397;
+    --line: #e1e6ed;
+    --accent: #3150c8;
+    --accent-ink: #2440a8;
+    --top: #16213a;
+    --user: #f1ecfb;
+    --user-line: #e2d8f5;
+    --asst: #f3f6fa;
+    --asst-line: #e1e7ef;
+    --ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --read: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --mono: "SF Mono", "Fira Code", ui-monospace, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--ui);
+    font-size: 14px;
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+  button, select { font-family: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ── Top bar ── */
+  #topbar {
+    background: var(--top);
+    color: #dfe5f1;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px 16px;
+    flex-wrap: wrap;
+  }
+  #topbar h1 { font-size: 17px; font-weight: 700; color: #fff; white-space: nowrap; letter-spacing: -0.01em; }
+  #topbar select, #topbar button {
+    font-size: 13px; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid #2c3a5c; background: #1f2c4a; color: #eef2fa; cursor: pointer;
+  }
+  #topbar select:hover { border-color: #43557f; }
+  #topbar button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 6px 18px; }
+  #topbar button:hover { background: #4462dc; }
+  #topbar button:disabled { opacity: .6; cursor: default; }
+  #topbar label { font-size: 12px; color: #9aa7c0; }
+  .cfg-group { display: flex; align-items: center; gap: 6px; }
+
+  /* ── Nav bar ── */
+  #navbar {
+    background: rgba(255,255,255,.92);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  #navbar button {
+    padding: 6px 16px; border: 1px solid var(--line); border-radius: 999px;
+    background: var(--surface); color: var(--ink); cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  #navbar button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  #navbar button:disabled { opacity: 0.4; cursor: default; }
+  #record-info { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  #status { font-size: 12px; color: var(--muted); margin-left: auto; }
+
+  /* ── Main content ── */
+  #main {
+    max-width: 880px;
+    margin: 24px auto;
+    padding: 0 20px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-2);
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-body { padding: 16px; }
+  .judge-note {
+    padding: 5px 16px;
+    font-size: 12px;
+    color: var(--muted);
+    font-style: italic;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* ── Question (the hero of each record) ── */
+  #record-view > .card:first-child { border-color: transparent; background: transparent; }
+  #record-view > .card:first-child .card-header { background: transparent; border: none; padding: 0 2px 4px; color: var(--muted); }
+  #record-view > .card:first-child .card-body { padding: 0 2px 6px; }
+  #question-text {
+    font-family: var(--read);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--ink);
+    line-height: 1.3;
+    letter-spacing: -0.005em;
+    text-wrap: balance;
+  }
+
+  /* ── Ground truth ── */
+  .disambig-item {
+    padding: 9px 0;
+    border-bottom: 1px solid #eef1f5;
+  }
+  .disambig-item:first-child { padding-top: 0; }
+  .disambig-item:last-child { border-bottom: none; padding-bottom: 0; }
+  .disambig-q { font-family: var(--read); color: var(--ink-2); font-style: italic; margin-bottom: 5px; font-size: 15px; }
+  .disambig-a { display: flex; gap: 6px; flex-wrap: wrap; }
+  .answer-pill {
+    background: #e7f6ec; color: #1f6f3d;
+    border: 1px solid #c9ead3;
+    padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  }
+
+  /* ── Belief state ── */
+  .toggle-btn {
+    font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer;
+    background: none; border: none; padding: 2px 0; text-decoration: underline;
+    text-decoration-color: rgba(49,80,200,.35); text-underline-offset: 3px;
+  }
+  .toggle-btn:hover { text-decoration-color: currentColor; }
+  .belief-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .belief-sample {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--ink);
+    line-height: 1.45;
+  }
+  .belief-num {
+    font-weight: 700;
+    color: var(--muted);
+    min-width: 18px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .belief-sample-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  .belief-sample-text { font-family: var(--read); font-size: 14px; color: var(--ink); line-height: 1.5; overflow-wrap: break-word; }
+  .group-badge {
+    font-size: 11px; font-weight: 700; padding: 1px 6px;
+    border-radius: 4px; border: 1px solid; white-space: nowrap;
+  }
+  .interp-badge { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+
+  /* ── Belief legend ── */
+  .belief-legend { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
+  .legend-section { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+  .legend-title {
+    font-size: 12px; font-weight: 600;
+    color: var(--muted); white-space: nowrap; padding-top: 2px;
+  }
+  .legend-chip {
+    font-size: 12px; padding: 2px 8px; border-radius: 6px; border: 1px solid;
+    white-space: normal;
+  }
+  .legend-chip-interp { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+
+  /* ── Strategy ── */
+  .strategy-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .01em;
+    white-space: nowrap;
+  }
+  .badge-clarify { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
+  .badge-direct  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .badge-abstain { background: #fef3c7; color: #854d0e; border: 1px solid #fde68a; }
+
+  .reasoning-text { color: var(--ink); font-size: 14px; margin-top: 10px; }
+  .reasoning-text strong { font-family: var(--ui); font-size: 13px; color: var(--ink-2); }
+
+  .raw-response-block {
+    margin-top: 12px;
+    background: #f4f6fa;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-size: 12px;
+    font-family: var(--mono);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    color: #2b3445;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+  .raw-section-label { font-weight: 700; color: var(--ink-2); }
+  .cluster-line { color: #1d4ed8; }
+  .interp-line  { color: #15803d; }
+
+  /* ── Conversation: a real chat — user on the right, assistant on the left ── */
+  .conv-turn {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .conv-turn:last-child { margin-bottom: 0; }
+  .conv-turn:has(.icon-user) { flex-direction: row-reverse; padding-left: 8%; }
+  .conv-turn:has(.icon-assistant) { padding-right: 8%; }
+  .conv-turn:has(.icon-user) .conv-role { text-align: right; }
+  .conv-icon {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+    margin-top: 18px;
+  }
+  .icon-assistant { background: #dfe7f6; }
+  .icon-user      { background: #ebe2fa; }
+  .conv-content { flex: 1; min-width: 0; }
+  .conv-role {
+    font-size: 12px; font-weight: 600;
+    color: var(--muted); margin-bottom: 4px;
+  }
+  .conv-role .strategy-badge { margin-left: 4px; vertical-align: 1px; }
+  .conv-text {
+    font-family: var(--read);
+    background: var(--asst);
+    border: 1px solid var(--asst-line);
+    border-radius: 4px 14px 14px 14px;
+    padding: 10px 14px;
+    font-size: 15px;
+    color: var(--ink);
+    line-height: 1.55;
+    overflow-wrap: break-word;
+    word-break: break-word;
+  }
+  .conv-turn:has(.icon-user) .conv-text {
+    background: var(--user);
+    border-color: var(--user-line);
+    border-radius: 14px 4px 14px 14px;
+  }
+  .conv-reasoning {
+    font-size: 12px; color: #6b5a2a;
+    background: #fdf8e8;
+    border-left: 3px solid #f0c64a;
+    padding: 5px 10px;
+    margin-bottom: 6px;
+    border-radius: 0 6px 6px 0;
+    font-style: italic;
+  }
+
+  /* ── Judge badge ── */
+  .judge-row {
+    display: flex; gap: 6px 8px; align-items: flex-start; flex-wrap: wrap;
+    margin-top: 8px; font-size: 13px;
+  }
+  .verdict-pass, .verdict-fail, .verdict-null {
+    padding: 1px 9px; border-radius: 999px; font-weight: 700; white-space: nowrap; font-size: 12px;
+  }
+  .verdict-pass { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+  .verdict-fail { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+  .verdict-null { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
+  .judge-reason { color: var(--ink-2); font-style: italic; flex: 1 1 240px; }
+  .judge-ref { font-size: 12px; color: var(--muted); background: #f3f5f8; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; word-break: break-word; }
+
+  /* ── Baseline answers ── */
+  .baseline-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .baseline-text {
+    font-family: var(--read);
+    font-size: 15px; color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 4px;
+    line-height: 1.55;
+    overflow-wrap: break-word;
+  }
+
+  /* ── Placeholder ── */
+  #placeholder {
+    text-align: center; color: var(--muted); padding: 60px 20px;
+  }
+  #placeholder h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
+  #placeholder code { background: #e6eaf0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
+
+  .hidden { display: none !important; }
+  .separator { border-top: 1px solid var(--line); margin: 14px 0; }
+
+  /* ── Intro banner ── */
+  #intro {
+    position: relative;
+    max-width: 880px;
+    margin: 24px auto 0;
+    padding: 16px 44px 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--accent);
+    border-radius: 12px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--ink-2);
+  }
+  #intro p { margin: 0 0 8px 0; }
+  #intro p:last-child { margin-bottom: 0; }
+  #intro strong { color: var(--ink); }
+  #intro a { color: var(--accent); text-decoration: none; font-weight: 500; }
+  #intro a:hover { text-decoration: underline; }
+  #intro-close {
+    position: absolute; top: 8px; right: 10px;
+    background: none; border: none; cursor: pointer;
+    font-size: 20px; line-height: 1; color: var(--muted);
+    padding: 4px 8px; border-radius: 6px;
+  }
+  #intro-close:hover { background: rgba(0,0,0,0.05); color: var(--ink); }
+  #intro-show {
+    display: block; max-width: 880px; margin: 12px auto 0;
+    padding: 0 20px; font-size: 12px; color: var(--muted);
+  }
+  #intro-show a { color: var(--accent); cursor: pointer; text-decoration: none; }
+  #intro-show a:hover { text-decoration: underline; }
+
+  /* ── Parsed reasoner-output block ── */
+  .parsed-block {
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 6px 8px 8px 6px;
+    padding: 10px 14px;
+  }
+  .parsed-block .reasoning-text { margin: 0; padding: 4px 0; font-family: var(--read); font-size: 15px; line-height: 1.55; }
+  .parsed-block .reasoning-text + .reasoning-text {
+    border-top: 1px dashed var(--line);
+    margin-top: 4px;
+    padding-top: 8px;
+  }
+
+  /* ── Small screens ── */
+  @media (max-width: 640px) {
+    body { font-size: 15px; }
+
+    #intro { margin: 12px 12px 0; padding: 10px 36px 10px 12px; font-size: 13.5px; line-height: 1.5; }
+    #intro p { margin-bottom: 6px; }
+    #intro-show { padding: 0 12px; font-size: 13px; }
+
+    #topbar { padding: 12px; gap: 8px 10px; }
+    #topbar h1 { width: 100%; font-size: 18px; }
+    .cfg-group { flex: 1 1 calc(50% - 5px); min-width: 0; flex-direction: column; align-items: stretch; gap: 2px; }
+    #topbar label { font-size: 12px; }
+    #topbar select { width: 100%; font-size: 16px; padding: 7px 8px; } /* 16px avoids iOS zoom-on-focus */
+    #topbar button { width: 100%; padding: 10px 14px; font-size: 15px; }
+
+    #navbar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
+    #navbar button { padding: 8px 16px; font-size: 14px; }
+    #record-info { font-size: 14px; }
+    #status { width: 100%; margin-left: 0; }
+
+    #main { margin: 16px auto; padding: 0 12px 48px; gap: 12px; }
+    .card-header { flex-wrap: wrap; padding: 10px 14px; font-size: 14px; }
+    .card-body { padding: 14px; }
+    #question-text { font-size: 22px; }
+
+    .toggle-btn { font-size: 13px; padding: 4px 0; }
+    .disambig-q { font-size: 15px; }
+    .answer-pill { font-size: 14px; }
+    .legend-title, .legend-chip { font-size: 13px; }
+    .group-badge { font-size: 12px; }
+    .belief-sample-text { font-size: 15px; }
+    .reasoning-text, .parsed-block .reasoning-text { font-size: 16px; }
+    .raw-response-block { font-size: 12.5px; }
+
+    .conv-turn { gap: 8px; }
+    .conv-turn:has(.icon-user) { padding-left: 0; }
+    .conv-turn:has(.icon-assistant) { padding-right: 0; }
+    .conv-icon { width: 26px; height: 26px; font-size: 13px; }
+    .conv-role { font-size: 13px; }
+    .conv-text, .baseline-text { font-size: 16px; }
+    .conv-reasoning { font-size: 13px; }
+    .judge-row { font-size: 14px; }
+    .verdict-pass, .verdict-fail, .verdict-null { font-size: 13px; }
+    .baseline-label { font-size: 13px; }
+  }
+
+  /* ── Undo classic-only treatments (this sheet is layered on top of it) ── */
+  .card-header, .legend-title, .conv-role, .baseline-label { text-transform: none; letter-spacing: normal; }
+  .strategy-badge { text-transform: none; }
+  #navbar button:hover:not(:disabled) { background: var(--surface); }
+
+  /* ── Centered layout (matches the classic sheet) ── */
+  #intro, #intro-show, #topbar, #navbar { width: min(840px, 100% - 40px); max-width: none; margin-left: auto; margin-right: auto; }
+  #intro-show { padding-left: 0; padding-right: 0; }
+  #topbar { margin-top: 16px; }
+  #main { margin-top: 16px; }
+  @media (max-width: 640px) {
+    #intro, #intro-show, #topbar, #navbar { width: calc(100% - 24px); }
+    #intro, #topbar { margin-top: 12px; }
+  }
+  #topbar { border-radius: 14px; }
+  #navbar {
+    top: 6px; margin-top: 8px;
+    border: 1px solid var(--line); border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(22, 33, 58, .08);
+  }
 </style>
 </head>
 <body>
@@ -509,6 +1030,8 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script>
 // ── Intro banner dismiss ──────────────────────────────────────────────────
 (function () {
@@ -710,6 +1233,16 @@ function esc(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// Render model output as markdown (sanitized). Falls back to escaped text with
+// line breaks if the CDN libraries didn't load.
+function md(s) {
+  if (s == null || s === '') return '';
+  if (window.marked && window.DOMPurify) {
+    return `<div class="md">${DOMPurify.sanitize(marked.parse(String(s), { gfm: true, breaks: true }))}</div>`;
+  }
+  return `<div class="md">${esc(s).replace(/\n/g, '<br>')}</div>`;
 }
 
 // ── Question ──────────────────────────────────────────────────────────────
@@ -981,7 +1514,7 @@ function renderBeliefState(rec) {
         <div class="belief-sample-header">
           <span class="belief-num">${sampleIdx}.</span>${badges}
         </div>
-        <div class="belief-sample-text">${esc(text)}</div>
+        <div class="belief-sample-text">${md(text)}</div>
       </div>`;
     }).join('');
 
@@ -1024,7 +1557,7 @@ function renderFinalBeliefState(rec) {
     const parsedBits = [];
     if (strategy)      parsedBits.push(`<div class="reasoning-text"><strong>Strategy:</strong> ${esc(strategy)}</div>`);
     if (gen.reasoning) parsedBits.push(`<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(gen.reasoning)}</div>`);
-    if (gen.response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${esc(gen.response)}</div>`);
+    if (gen.response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${md(gen.response)}</div>`);
     if (parsedBits.length) outputHtml += `<div class="parsed-block" style="margin-top:10px;">${parsedBits.join('')}</div>`;
     outputHtml += judgeHtml;
     outputHtml += `<div class="separator"></div>`;
@@ -1061,7 +1594,7 @@ function renderFinalBeliefState(rec) {
         <div class="belief-sample-header">
           <span class="belief-num">${sampleIdx}.</span>${badge}
         </div>
-        <div class="belief-sample-text">${esc(text)}</div>
+        <div class="belief-sample-text">${md(text)}</div>
       </div>`;
     }).join('');
 
@@ -1102,7 +1635,7 @@ function renderStrategy(rec) {
   const parsedBits = [];
   if (strategy)  parsedBits.push(`<div class="reasoning-text"><strong>Strategy:</strong> ${esc(strategy)}</div>`);
   if (reasoning) parsedBits.push(`<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(reasoning)}</div>`);
-  if (response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${esc(response)}</div>`);
+  if (response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${md(response)}</div>`);
   if (parsedBits.length) {
     html += `<div class="parsed-block">${parsedBits.join('')}</div>`;
   }
@@ -1221,7 +1754,7 @@ function convTurn(role, icon, label, reasoning, text, extra = '', badge = '') {
       <div class="conv-content">
         <div class="conv-role">${esc(label)} ${badge}</div>
         ${reasoningHtml}
-        <div class="conv-text">${esc(text)}</div>
+        <div class="conv-text">${md(text)}</div>
         ${extra}
       </div>
     </div>`;
@@ -1254,7 +1787,7 @@ function renderBaselines(rec) {
   const jdAny = rec.jDirect?.generations?.direct_anyref;
   if (directSampled) {
     html += `<div class="baseline-label">🤖 Direct generation</div>`;
-    html += `<div class="baseline-text">${esc(directSampled)}</div>`;
+    html += `<div class="baseline-text">${md(directSampled)}</div>`;
     if (jd)    html += judgeBlock(jd,    rec.jDirect?.context?.direct_ref || null);
     if (jdAny) html += judgeBlock(jdAny, 'any');
   }
@@ -1293,13 +1826,16 @@ function renderBaselines(rec) {
     html += `<div class="separator"></div>`;
     html += `<div class="baseline-label">🤖 Direct generation based on oracle disambiguated question</div>`;
     if (dq) html += `<div style="font-size:13px;color:#444;margin-bottom:6px;">📚 <strong>AmbigQA disambiguated question:</strong> "${esc(dq)}" <span style="color:#888;font-size:12px;">(ref: ${esc(ref)})</span></div>`;
-    html += `<div class="baseline-text">${esc(ans)}</div>`;
+    html += `<div class="baseline-text">${md(ans)}</div>`;
     if (jdb)    html += judgeBlock(jdb,    rec.jDisamb?.context?.disambig_ref || null);
     if (jdbAny) html += judgeBlock(jdbAny, 'any');
   }
 
   el.innerHTML = html || '<em style="color:#888">No baseline data</em>';
 }
+
+// Load the default config right away so there's something to look at.
+loadData();
 
 // ── Utility ───────────────────────────────────────────────────────────────
 function setStatus(msg) {
