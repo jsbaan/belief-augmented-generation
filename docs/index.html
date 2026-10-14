@@ -2,1905 +2,1250 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Serve from the project root or docs/: python -m http.server 8000 -->
 <title>BAG Explorer</title>
-<!--    python -m http.server 8000 -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
-<!--
-  Two stylesheets. The first is the classic look; the second (modern: serif reading
-  text, chat bubbles, larger type) is layered on top only where its `media`
-  attribute matches. To switch:
-    media="(max-width: 640px)"  -> modern on phones, classic on desktop (default)
-    media="all"                 -> modern everywhere
-    media="not all"             -> classic everywhere
--->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+/* Layout: sticky header with the run config; record list rail on the left (a drawer on phones);
+   one reading column per record: question → what each method did → belief state → conversation → baselines. */
+:root {
+  --bg: #f3f5f8; --surface: #ffffff; --sunk: #eaeef2; --line: #d7dde5; --line-soft: #e6eaef;
+  --ink: #15202c; --ink-2: #445162; --ink-3: #758293;
+  --accent: #2a5d8f; --accent-ink: #ffffff; --accent-soft: #e1ebf5;
+  --pass: #1d7746; --pass-soft: #dff1e6; --fail: #b0372f; --fail-soft: #f7e1de;
+  --abst: #85600f; --abst-soft: #f4ead2;
+  --c0: #4e79a7; --c1: #f28e2b; --c2: #59a14f; --c3: #e15759; --c4: #76b7b2;
+  --c5: #edc948; --c6: #b07aa1; --c7: #ff9da7; --c8: #9c755f; --c9: #bab0ac;
+  --font-ui: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-read: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --rail-w: 340px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1319; --surface: #151c24; --sunk: #1b232d; --line: #2a3542; --line-soft: #222c37;
+    --ink: #e5eaf0; --ink-2: #a8b3c0; --ink-3: #7d8998;
+    --accent: #82b2e2; --accent-ink: #0e1319; --accent-soft: #1c2b3c;
+    --pass: #5ec48b; --pass-soft: #15301f; --fail: #f07d73; --fail-soft: #3a1d1b;
+    --abst: #dab55b; --abst-soft: #332810;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1319; --surface: #151c24; --sunk: #1b232d; --line: #2a3542; --line-soft: #222c37;
+  --ink: #e5eaf0; --ink-2: #a8b3c0; --ink-3: #7d8998;
+  --accent: #82b2e2; --accent-ink: #0e1319; --accent-soft: #1c2b3c;
+  --pass: #5ec48b; --pass-soft: #15301f; --fail: #f07d73; --fail-soft: #3a1d1b;
+  --abst: #dab55b; --abst-soft: #332810;
+  color-scheme: dark;
+}
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 14px;
-    background: #f5f5f5;
-    color: #222;
-    line-height: 1.5;
-  }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+.mono { font-family: var(--font-mono); font-size: 12px; }
 
-  /* ── Top bar ── */
-  #topbar {
-    background: #1a1a2e;
-    color: #e0e0e0;
-    padding: 12px 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  #topbar h1 { font-size: 15px; font-weight: 600; color: #fff; white-space: nowrap; }
-  #topbar select, #topbar button {
-    font-size: 12px; padding: 4px 8px; border-radius: 4px; border: none;
-    background: #2d2d50; color: #e0e0e0; cursor: pointer;
-  }
-  #topbar button { background: #4a90d9; color: #fff; font-weight: 600; padding: 5px 14px; }
-  #topbar button:hover { background: #357abd; }
-  #topbar label { font-size: 11px; color: #aaa; }
-  .cfg-group { display: flex; align-items: center; gap: 5px; }
+/* ── Header ── */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30;
+  background: var(--surface); border-bottom: 1px solid var(--line);
+  padding-block: 10px; padding-inline: 20px;
+  display: flex; align-items: center; gap: 10px 22px; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand b { font-size: 16px; font-weight: 700; letter-spacing: -.01em; }
+.brand nav { display: flex; gap: 12px; font-size: 13px; }
+.brand nav a, .linkbtn { color: var(--ink-2); text-decoration: none; background: none; border: 0; padding: 0; font-size: 13px; }
+.brand nav a:hover, .linkbtn:hover { color: var(--accent); text-decoration: underline; }
+.config { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; font-size: 13px; }
+.cfg { display: flex; align-items: center; gap: 6px; }
+.cfg label, .cfg .k { color: var(--ink-3); font-size: 12px; }
+.cfg select {
+  font-family: var(--font-mono); font-size: 12px;
+  background: var(--sunk); border: 1px solid var(--line); border-radius: 6px;
+  padding: 3px 6px;
+}
+.cfg .v { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
+.status { margin-left: auto; font-size: 12px; color: var(--ink-3); }
+.cfg-btn { display: none; border: 1px solid var(--line); background: var(--sunk); border-radius: 6px; padding: 3px 9px; color: var(--ink-2); }
+.browse-btn {
+  display: none; border: 1px solid var(--line); background: var(--sunk);
+  border-radius: 6px; padding: 4px 10px; font-size: 13px;
+}
 
-  /* ── Nav bar ── */
-  #navbar {
-    background: #fff;
-    border-bottom: 1px solid #ddd;
-    padding: 8px 20px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  #navbar button {
-    padding: 5px 16px; border: 1px solid #ccc; border-radius: 4px;
-    background: #fafafa; cursor: pointer; font-size: 13px;
-  }
-  #navbar button:hover:not(:disabled) { background: #eee; }
-  #navbar button:disabled { opacity: 0.4; cursor: default; }
-  #record-info { font-size: 13px; color: #555; }
-  #status { font-size: 12px; color: #888; margin-left: auto; }
+/* ── About panel ── */
+.about {
+  background: var(--accent-soft); border-bottom: 1px solid var(--line);
+  padding-block: 16px; padding-inline: 20px;
+}
+.about-inner { max-width: 820px; margin: 0 auto; display: grid; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.about h2 { margin: 0; font-size: 15px; color: var(--ink); }
+.about p { margin: 0; }
+.about-close { justify-self: start; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 10px; font-size: 13px; }
 
-  /* ── Main content ── */
-  #main {
-    max-width: 960px;
-    margin: 24px auto;
-    padding: 0 20px 60px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
+/* ── Shell ── */
+.shell { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); align-items: start; }
+.rail {
+  position: sticky; top: var(--top-h, 52px);
+  height: calc(100vh - var(--top-h, 52px));
+  border-right: 1px solid var(--line); background: var(--surface);
+  display: flex; flex-direction: column; min-width: 0;
+}
+.filters { padding: 14px 16px 10px; display: grid; gap: 8px; border-bottom: 1px solid var(--line-soft); }
+.filters input[type=search] {
+  width: 100%; border: 1px solid var(--line); background: var(--sunk); border-radius: 8px; padding: 7px 10px; font-size: 14px;
+}
+.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.frow select { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 4px 6px; font-size: 13px; }
+.fcheck { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.fcount { font-size: 12px; color: var(--ink-3); display: flex; justify-content: space-between; }
+.list { overflow-y: auto; flex: 1; padding: 4px 0 24px; }
+.row {
+  display: grid; gap: 4px; width: 100%; text-align: left;
+  background: none; border: 0; border-left: 3px solid transparent;
+  padding: 8px 14px 8px 13px;
+}
+.row:hover { background: var(--sunk); }
+.row.is-current { background: var(--accent-soft); border-left-color: var(--accent); }
+.row-q { font-size: 13.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.row-meta { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--ink-3); }
+.mini { width: 64px; height: 6px; border-radius: 3px; background: var(--sunk); flex: none; }
+.empty-list { padding: 20px 16px; color: var(--ink-3); font-size: 13px; }
 
-  /* ── Cards ── */
-  .card {
-    background: #fff;
-    border-radius: 8px;
-    border: 1px solid #e0e0e0;
-    overflow: hidden;
-  }
-  .card-header {
-    padding: 8px 14px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-    color: #666;
-    background: #fafafa;
-    border-bottom: 1px solid #e8e8e8;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .card-body { padding: 14px 16px; }
-  .judge-note {
-    padding: 5px 14px;
-    font-size: 11px;
-    color: #888;
-    font-style: italic;
-    background: #fafafa;
-    border-bottom: 1px solid #eee;
-  }
+/* ── Record column ── */
+.main { min-width: 0; padding-inline: 28px; padding-block: 24px 80px; }
+.col { max-width: 820px; margin: 0 auto; display: grid; gap: 20px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px 20px; min-width: 0; }
+.panel .sample, .panel .nested { background: var(--bg); }
+.panel .sample-body:not(.open)::after { background: linear-gradient(transparent, var(--bg)); }
+.placeholder { color: var(--ink-3); padding-block: 60px; text-align: center; }
 
-  /* ── Question ── */
-  #question-text {
-    font-size: 20px;
-    font-weight: 600;
-    color: #111;
-    line-height: 1.4;
-  }
+.rec-nav { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-3); }
+.navbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 3px 11px; font-size: 14px; }
+.navbtn:disabled { opacity: .4; cursor: default; }
+.pos { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.rec-nav .spacer { flex: 1; }
+.question {
+  font-family: var(--font-read); font-weight: 600; font-size: clamp(22px, 3.2vw, 30px);
+  line-height: 1.25; letter-spacing: -.01em; margin: 10px 0 14px; text-wrap: balance;
+}
+.intent { display: grid; gap: 6px; font-size: 14px; }
+.intent-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 8px; }
+.tag {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3);
+}
+.ref {
+  display: inline-block; font-size: 12.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  background: var(--pass-soft); color: var(--pass);
+}
+.dq { font-family: var(--font-read); font-style: italic; color: var(--ink-2); }
+details.interps summary { cursor: pointer; color: var(--ink-3); font-size: 13px; }
+.interp-list { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.interp-list li { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding-left: 12px; border-left: 2px solid var(--line); }
+.interp-list li.is-target { border-left-color: var(--accent); }
 
-  /* ── Ground truth ── */
-  .disambig-item {
-    padding: 8px 0;
-    border-bottom: 1px solid #f0f0f0;
-  }
-  .disambig-item:last-child { border-bottom: none; }
-  .disambig-q { color: #444; font-style: italic; margin-bottom: 3px; }
-  .disambig-a { display: flex; gap: 6px; flex-wrap: wrap; }
-  .answer-pill {
-    background: #e8f5e9; color: #2e7d32;
-    border: 1px solid #c8e6c9;
-    padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;
-  }
+section > .sec-head { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; margin: 0 0 16px; padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); }
+section h2 { font-size: 18px; font-weight: 650; letter-spacing: -.01em; color: var(--ink); margin: 0; }
+.sub { font-size: 13px; color: var(--ink-3); }
+.hint { font-size: 12.5px; color: var(--ink-3); margin: 8px 0 0; }
 
-  /* ── Belief state ── */
-  .toggle-btn {
-    font-size: 11px; color: #4a90d9; cursor: pointer;
-    background: none; border: none; padding: 0; text-decoration: underline;
-  }
-  .belief-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-    gap: 8px;
-    margin-top: 10px;
-  }
-  .belief-sample {
-    background: #f8f8f8;
-    border: 1px solid #e8e8e8;
-    border-radius: 5px;
-    padding: 8px 10px;
-    font-size: 12px;
-    color: #333;
-    line-height: 1.4;
-  }
-  .belief-num {
-    font-weight: 700;
-    color: #888;
-    min-width: 18px;
-    flex-shrink: 0;
-  }
-  .belief-sample-header {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 5px;
-    flex-wrap: wrap;
-  }
-  .belief-sample-text { font-size: 12px; color: #333; line-height: 1.4; }
-  .group-badge {
-    font-size: 10px; font-weight: 700; padding: 1px 5px;
-    border-radius: 3px; border: 1px solid; white-space: nowrap;
-  }
-  .interp-badge { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+/* Comparison row */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; font-size: 12.5px; margin-left: auto; }
+.seg span { padding: 3px 8px; color: var(--ink-3); background: var(--sunk); }
+.seg button { border: 0; background: var(--surface); padding: 3px 10px; border-left: 1px solid var(--line); }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--accent-ink); }
+.cmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 8px; }
+.cell {
+  display: grid; gap: 4px; align-content: start; text-align: left;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  min-height: 92px;
+}
+.cell:hover { border-color: var(--ink-3); }
+.cell.is-current { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; background: var(--accent-soft); }
+.cell.is-base { background: var(--sunk); }
+.cell-name { font-size: 12px; font-weight: 700; letter-spacing: .04em; color: var(--ink-2); }
+.cell-name small { font-weight: 500; color: var(--ink-3); letter-spacing: 0; }
+.cell-strat { font-size: 13px; line-height: 1.3; }
+.cell-v { font-size: 13px; font-weight: 600; }
 
-  /* ── Belief legend ── */
-  .belief-legend { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
-  .legend-section { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
-  .legend-title {
-    font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
-    color: #888; white-space: nowrap; padding-top: 2px;
-  }
-  .legend-chip {
-    font-size: 11px; padding: 2px 7px; border-radius: 4px; border: 1px solid;
-    white-space: nowrap;
-  }
-  .legend-chip-interp { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
+/* Strategy + verdict marks */
+.s-answer { color: var(--ink); }
+.s-clarify { color: var(--accent); }
+.s-abstain { color: var(--abst); }
+.chip { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.chip.s-answer { color: var(--ink-2); }
+.v-pass { color: var(--pass); } .v-fail { color: var(--fail); } .v-none { color: var(--ink-3); font-weight: 500; }
+.pill { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; }
+.pill.v-pass { background: var(--pass-soft); } .pill.v-fail { background: var(--fail-soft); } .pill.v-none { background: var(--sunk); }
 
-  /* ── Strategy ── */
-  .strategy-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-  }
-  .badge-clarify { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
-  .badge-direct  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-  .badge-abstain { background: #fef9c3; color: #854d0e; border: 1px solid #fde68a; }
+/* Belief state */
+.bb { display: grid; gap: 12px; }
+.bar { display: flex; gap: 2px; height: 26px; }
+.seg-s { flex: 1; border: 0; padding: 0; border-radius: 3px; min-width: 0; transition: opacity .15s; position: relative; }
+.bar.has-active .seg-s:not(.on) { opacity: .25; }
+.ticks { display: flex; gap: 2px; margin-top: -8px; }
+.ticks span { flex: 1; text-align: center; font-size: 11px; line-height: 1; font-weight: 700; }
+.legend { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.lg {
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  width: 100%; text-align: left; background: none; border: 0; border-radius: 6px; padding: 5px 6px;
+}
+.lg:hover { background: var(--sunk); }
+.lg.on { background: var(--accent-soft); }
+.sw { width: 12px; height: 12px; border-radius: 3px; }
+.lg-t { font-size: 14px; min-width: 0; overflow-wrap: anywhere; }
+.lg-t em { color: var(--ink-3); font-style: normal; font-size: 12.5px; }
+.lg-n { font-variant-numeric: tabular-nums; font-size: 13px; color: var(--ink-3); }
+.bb-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; font-size: 12.5px; color: var(--ink-3); }
+.textbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: 13px; font-weight: 600; }
+.samples { display: grid; gap: 8px; }
+.samples.grid { grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+.sample.plain { grid-template-columns: 22px minmax(0, 1fr); }
+.switch {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--line); background: var(--surface); border-radius: 999px;
+  padding: 3px 12px 3px 4px; font-size: 12.5px; color: var(--ink-2);
+}
+.switch small { color: var(--ink-3); font-size: 12px; }
+.switch .knob { width: 26px; height: 16px; border-radius: 999px; background: var(--sunk); border: 1px solid var(--line); position: relative; flex: none; }
+.switch .knob::after { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-3); transition: left .15s; }
+.switch[aria-pressed=true] .knob { background: var(--accent); border-color: var(--accent); }
+.switch[aria-pressed=true] .knob::after { left: 12px; background: var(--accent-ink); }
+.eval-note { font-size: 13px; color: var(--ink-2); background: var(--sunk); border-radius: 8px; padding: 8px 12px; margin: 0 0 12px; }
 
-  .reasoning-text { color: #444; font-size: 13px; margin-top: 10px; }
+.sample { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; }
+.sample-n { display: grid; justify-items: center; align-content: start; gap: 6px; font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.sample-n .sw { width: 10px; height: 10px; }
+.sample-body { position: relative; max-height: 7.6em; overflow: hidden; cursor: zoom-in; }
+.sample-body.open { max-height: none; cursor: zoom-out; }
+.sample-body:not(.open)::after { content: ""; position: absolute; inset: auto 0 0 0; height: 2.2em; background: linear-gradient(transparent, var(--surface)); }
 
-  .raw-response-block {
-    margin-top: 12px;
-    background: #f5f7fa;
-    border: 1px solid #dde;
-    border-radius: 5px;
-    padding: 10px 12px;
-    font-size: 12px;
-    font-family: "SF Mono", "Fira Code", monospace;
-    white-space: pre-wrap;
-    color: #333;
-    max-height: 260px;
-    overflow-y: auto;
-  }
-  .raw-section-label { font-weight: 700; color: #555; }
-  .cluster-line { color: #1d4ed8; }
-  .interp-line  { color: #15803d; }
+/* Reading text (model generations) */
+.read { font-family: var(--font-read); font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; min-width: 0; }
+.read p, .read ul, .read ol { margin: 0 0 .6em; }
+.read > :last-child { margin-bottom: 0; }
+.read ul, .read ol { padding-left: 1.3em; }
+.read h1, .read h2, .read h3, .read h4 { font-family: var(--font-ui); font-size: 14px; margin: .8em 0 .3em; }
+.sample .read { font-size: 14.5px; line-height: 1.55; }
 
-  /* ── Conversation ── */
-  .conv-turn {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-  .conv-turn:last-child { margin-bottom: 0; }
-  .conv-icon {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-    margin-top: 2px;
-  }
-  .icon-assistant { background: #dbeafe; }
-  .icon-user      { background: #f3e8ff; }
-  .conv-content { flex: 1; }
-  .conv-role {
-    font-size: 10px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .06em; color: #888; margin-bottom: 4px;
-  }
-  .conv-text {
-    background: #f8f8f8;
-    border: 1px solid #e8e8e8;
-    border-radius: 6px;
-    padding: 10px 12px;
-    font-size: 13px;
-    color: #222;
-    line-height: 1.5;
-    overflow-wrap: break-word;
-    word-break: break-word;
-  }
-  .conv-reasoning {
-    font-size: 11px; color: #888;
-    background: #fffbeb;
-    border-left: 3px solid #fbbf24;
-    padding: 4px 8px;
-    margin-bottom: 6px;
-    border-radius: 0 4px 4px 0;
-    font-style: italic;
-  }
+/* Conversation: a chat with avatars; reasoning, raw output and judge notes sit behind small toggles */
+.conv { display: grid; gap: 22px; }
+.msg { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: start; }
+.msg.user { grid-template-columns: minmax(0, 1fr) 36px; }
+.msg.user .avatar { order: 2; }
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+  font: 19px/1 "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+  background: var(--sunk); border: 1px solid var(--line-soft);
+}
+.msg.user .avatar { background: var(--accent-soft); }
+.msg-main { display: grid; gap: 6px; justify-items: start; min-width: 0; }
+.msg.user .msg-main { justify-items: end; }
+.msg-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-3); }
+.who { font-weight: 650; color: var(--ink); font-size: 13.5px; }
+.turn-n { font-size: 11.5px; color: var(--ink-3); }
+.bubble { max-width: min(640px, 100%); min-width: 0; padding: 11px 15px; border-radius: 18px; }
+.msg.asst .bubble { background: var(--bg); border: 1px solid var(--line-soft); border-top-left-radius: 5px; }
+.msg.user .bubble { background: var(--accent-soft); border-top-right-radius: 5px; }
+.bubble.read { font-size: 15.5px; line-height: 1.55; }
+.foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; max-width: min(640px, 100%); }
+.msg.user .foot { justify-content: flex-end; }
+.xbtn {
+  font-size: 12.5px; color: var(--ink-2); background: none;
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px;
+}
+.xbtn:hover { border-color: var(--ink-3); color: var(--ink); }
+.xbtn[aria-expanded=true] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.xpanel { justify-self: stretch; display: grid; gap: 8px; min-width: 0; font-size: 13.5px; color: var(--ink-2); background: var(--sunk); border-radius: 10px; padding: 10px 12px; }
+.xpanel p { margin: 0; }
+.xpanel pre.raw { background: none; padding: 0; max-height: 420px; }
+.verdict-line { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-right: 4px; font-size: 12.5px; }
+.vmini { font-weight: 700; }
+pre.raw { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--font-mono); font-size: 12px; line-height: 1.55; background: var(--sunk); border-radius: 8px; padding: 10px 12px; margin: 0; max-height: 420px; overflow-y: auto; }
+pre.raw b { color: var(--accent); }
+.intent-note { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: baseline; gap: 4px 8px; max-width: min(640px, 100%); font-size: 12.5px; color: var(--ink-2); }
+.subtle { color: var(--ink-3); font-size: 13px; }
+.nested { border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px; background: var(--surface); }
 
-  /* ── Judge badge ── */
-  .judge-row {
-    display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap;
-    margin-top: 8px; font-size: 12px;
-  }
-  .verdict-pass {
-    background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;
-    padding: 2px 8px; border-radius: 4px; font-weight: 700; white-space: nowrap;
-  }
-  .verdict-fail {
-    background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca;
-    padding: 2px 8px; border-radius: 4px; font-weight: 700; white-space: nowrap;
-  }
-  .verdict-null {
-    background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb;
-    padding: 2px 8px; border-radius: 4px; font-weight: 700; white-space: nowrap;
-  }
-  .judge-reason { color: #555; font-style: italic; }
-  .judge-ref { font-size: 11px; color: #888; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 3px; padding: 1px 5px; word-break: break-word; }
+/* Baselines */
+.base-grid { display: grid; gap: 18px; }
+.base { display: grid; gap: 8px; justify-items: start; }
+.base > .read, .base .xpanel { justify-self: stretch; }
+.base + .base { border-top: 1px solid var(--line-soft); padding-top: 18px; }
+.base h3 { margin: 0; font-size: 15px; font-weight: 650; }
 
-  /* ── Baseline answers ── */
-  .baseline-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; margin-bottom: 4px; }
-  .baseline-text {
-    font-size: 13px; color: #333;
-    background: #f8f8f8;
-    border: 1px solid #e8e8e8;
-    border-radius: 5px;
-    padding: 10px 12px;
-    margin-bottom: 4px;
-    line-height: 1.5;
+@media (max-width: 999px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .rail {
+    position: fixed; z-index: 40; top: 0; bottom: 0; left: 0; height: auto;
+    width: min(360px, 90vw); transform: translateX(-102%); transition: transform .2s;
+    box-shadow: 0 0 40px rgba(0,0,0,.25);
+    padding-top: env(safe-area-inset-top, 0px);
   }
-
-  /* ── Placeholder ── */
-  #placeholder {
-    text-align: center; color: #888; padding: 60px 20px;
-  }
-  #placeholder h2 { font-size: 18px; margin-bottom: 8px; }
-  #placeholder code { background: #eee; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
-
-  .hidden { display: none !important; }
-  .separator { border-top: 1px solid #e8e8e8; margin: 12px 0; }
-
-  /* ── Intro banner ── */
-  #intro {
-    position: relative;
-    max-width: 960px;
-    margin: 24px auto 0;
-    padding: 16px 44px 16px 20px;
-    background: #eef4fb;
-    border: 1px solid #cfe0f2;
-    border-radius: 8px;
-    font-size: 13px;
-    line-height: 1.55;
-    color: #1f3b5c;
-  }
-  #intro p { margin: 0 0 6px 0; }
-  #intro p:last-child { margin-bottom: 0; }
-  #intro a { color: #1d4ed8; text-decoration: none; }
-  #intro a:hover { text-decoration: underline; }
-  #intro-close {
-    position: absolute; top: 8px; right: 10px;
-    background: none; border: none; cursor: pointer;
-    font-size: 18px; line-height: 1; color: #6b7c94;
-    padding: 4px 8px; border-radius: 4px;
-  }
-  #intro-close:hover { background: rgba(0,0,0,0.05); color: #1f3b5c; }
-  #intro-show {
-    display: block; max-width: 960px; margin: 12px auto 0;
-    padding: 6px 20px 0; font-size: 11px; color: #6b7c94;
-  }
-  #intro-show a { color: #4a90d9; cursor: pointer; text-decoration: none; }
-  #intro-show a:hover { text-decoration: underline; }
-
-  /* ── Parsed reasoner-output block ── */
-  .parsed-block {
-    background: #f7f9fc;
-    border: 1px solid #e5eaf2;
-    border-left: 3px solid #4a90d9;
-    border-radius: 4px;
-    padding: 10px 14px;
-  }
-  .parsed-block .reasoning-text { margin: 0; padding: 4px 0; }
-  .parsed-block .reasoning-text + .reasoning-text {
-    border-top: 1px dashed #e5eaf2;
-    margin-top: 4px;
-    padding-top: 8px;
-  }
-
-  /* ── Centered layout: intro, config bar, nav bar and cards share one column ── */
-  #intro, #intro-show, #topbar, #navbar {
-    width: min(920px, 100% - 40px);
-    margin-left: auto;
-    margin-right: auto;
-  }
-  #intro { max-width: none; }
-  #intro-show { max-width: none; padding-left: 0; padding-right: 0; }
-  #topbar { margin-top: 16px; border-radius: 10px; }
-  #navbar {
-    top: 8px; margin-top: 10px;
-    border: 1px solid #e0e0e0; border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(20, 30, 60, .06);
-  }
-  #main { margin-top: 16px; }
-
-  /* ── Rendered markdown in model outputs ── */
-  .md > :first-child { margin-top: 0; }
-  .md > :last-child { margin-bottom: 0; }
-  .md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 .6em; }
-  .md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { font-size: 1.05em; font-weight: 700; margin: .9em 0 .35em; line-height: 1.35; }
-  .md ul, .md ol { padding-left: 1.4em; }
-  .md li { margin: .15em 0; }
-  .md li > ul, .md li > ol { margin: .15em 0 0; }
-  .md code { font-family: "SF Mono", "Fira Code", monospace; font-size: .9em; background: rgba(0,0,0,.05); padding: 0 .3em; border-radius: 3px; }
-  .md pre { background: rgba(0,0,0,.05); padding: .6em .8em; border-radius: 5px; overflow-x: auto; }
-  .md pre code { background: none; padding: 0; }
-  .md blockquote { border-left: 3px solid #ddd; padding-left: .8em; color: #555; }
-  .md hr { border: none; border-top: 1px solid #e5e5e5; margin: .8em 0; }
-  .md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
-  .md th, .md td { border: 1px solid #e0e0e0; padding: .25em .5em; text-align: left; }
-  .md a { color: #1d4ed8; }
-  /* "Response:" label stays on the same line as the first paragraph */
-  .reasoning-text > .md, .reasoning-text > .md > p:first-child { display: inline; }
-
-  /* ── Conversation as a chat: user on the right, assistant on the left ── */
-  .conv-turn:has(.icon-user) { flex-direction: row-reverse; padding-left: 10%; }
-  .conv-turn:has(.icon-assistant) { padding-right: 10%; }
-  .conv-turn:has(.icon-user) .conv-role { text-align: right; }
-  .conv-content { min-width: 0; }
-  .conv-icon { margin-top: 18px; }
-  .conv-text { border-radius: 3px 12px 12px 12px; }
-  .conv-turn:has(.icon-user) .conv-text {
-    background: #f8f3fe;
-    border-color: #ebdffb;
-    border-radius: 12px 3px 12px 12px;
-  }
-
-  /* ── Small screens (fallback; the modern sheet below takes over here) ── */
-  @media (max-width: 640px) {
-    #intro, #intro-show, #topbar, #navbar { width: calc(100% - 24px); }
-    #intro { margin-top: 12px; padding: 12px 40px 12px 14px; font-size: 12.5px; }
-    #topbar { padding: 10px 12px; gap: 8px 12px; }
-    #topbar h1 { width: 100%; }
-    .cfg-group { flex: 1 1 calc(50% - 6px); min-width: 0; flex-direction: column; align-items: stretch; gap: 2px; }
-    #topbar select { width: 100%; font-size: 16px; padding: 6px 8px; }
-    #topbar button { width: 100%; padding: 8px 14px; font-size: 14px; }
-    #navbar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; top: 6px; }
-    #status { width: 100%; margin-left: 0; }
-    #main { margin: 12px auto; padding: 0 12px 40px; gap: 12px; }
-    .card-header { flex-wrap: wrap; }
-    .card-body { padding: 12px; }
-    .conv-turn:has(.icon-user) { padding-left: 0; }
-    .conv-turn:has(.icon-assistant) { padding-right: 0; }
-  }
+  body.rail-open .rail { transform: none; }
+  .scrim { position: fixed; inset: 0; z-index: 35; background: rgba(0,0,0,.3); }
+  .browse-btn { display: inline-block; }
+  .main { padding-inline: 16px; padding-block: 18px 60px; }
+  .panel { padding: 14px 14px 16px; border-radius: 12px; }
+  .status { margin-left: 0; }
+  .top { padding-inline: 16px; }
+  .msg { grid-template-columns: 30px minmax(0, 1fr); gap: 8px; }
+  .msg.user { grid-template-columns: minmax(0, 1fr) 30px; }
+  .avatar { width: 30px; height: 30px; font-size: 16px; }
+}
+@media (max-width: 700px) {
+  .top { gap: 8px 12px; }
+  .brand { flex-wrap: wrap; row-gap: 4px; }
+  .cfg-btn { display: inline-block; }
+  .config { display: none; width: 100%; }
+  body.cfg-open .config { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
-<style media="(max-width: 640px)">
-  :root {
-    --bg: #eef1f5;
-    --surface: #ffffff;
-    --surface-2: #f6f8fb;
-    --ink: #18202e;
-    --ink-2: #455064;
-    --muted: #788397;
-    --line: #e1e6ed;
-    --accent: #3150c8;
-    --accent-ink: #2440a8;
-    --top: #16213a;
-    --user: #f1ecfb;
-    --user-line: #e2d8f5;
-    --asst: #f3f6fa;
-    --asst-line: #e1e7ef;
-    --ui: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --read: "Source Serif 4", Georgia, "Times New Roman", serif;
-    --mono: "SF Mono", "Fira Code", ui-monospace, Menlo, monospace;
-  }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: var(--ui);
-    font-size: 14px;
-    background: var(--bg);
-    color: var(--ink);
-    line-height: 1.5;
-    -webkit-text-size-adjust: 100%;
-  }
-  button, select { font-family: inherit; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-  /* ── Top bar ── */
-  #topbar {
-    background: var(--top);
-    color: #dfe5f1;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px 16px;
-    flex-wrap: wrap;
-  }
-  #topbar h1 { font-size: 17px; font-weight: 700; color: #fff; white-space: nowrap; letter-spacing: -0.01em; }
-  #topbar select, #topbar button {
-    font-size: 13px; padding: 5px 8px; border-radius: 6px;
-    border: 1px solid #2c3a5c; background: #1f2c4a; color: #eef2fa; cursor: pointer;
-  }
-  #topbar select:hover { border-color: #43557f; }
-  #topbar button { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; padding: 6px 18px; }
-  #topbar button:hover { background: #4462dc; }
-  #topbar button:disabled { opacity: .6; cursor: default; }
-  #topbar label { font-size: 12px; color: #9aa7c0; }
-  .cfg-group { display: flex; align-items: center; gap: 6px; }
-
-  /* ── Nav bar ── */
-  #navbar {
-    background: rgba(255,255,255,.92);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--line);
-    padding: 8px 20px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  #navbar button {
-    padding: 6px 16px; border: 1px solid var(--line); border-radius: 999px;
-    background: var(--surface); color: var(--ink); cursor: pointer; font-size: 13px; font-weight: 600;
-  }
-  #navbar button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
-  #navbar button:disabled { opacity: 0.4; cursor: default; }
-  #record-info { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-  #status { font-size: 12px; color: var(--muted); margin-left: auto; }
-
-  /* ── Main content ── */
-  #main {
-    max-width: 880px;
-    margin: 24px auto;
-    padding: 0 20px 64px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
-
-  /* ── Cards ── */
-  .card {
-    background: var(--surface);
-    border-radius: 12px;
-    border: 1px solid var(--line);
-    overflow: hidden;
-  }
-  .card-header {
-    padding: 10px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--ink-2);
-    background: var(--surface);
-    border-bottom: 1px solid var(--line);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .card-body { padding: 16px; }
-  .judge-note {
-    padding: 5px 16px;
-    font-size: 12px;
-    color: var(--muted);
-    font-style: italic;
-    background: var(--surface-2);
-    border-bottom: 1px solid var(--line);
-  }
-
-  /* ── Question (the hero of each record) ── */
-  #record-view > .card:first-child { border-color: transparent; background: transparent; }
-  #record-view > .card:first-child .card-header { background: transparent; border: none; padding: 0 2px 4px; color: var(--muted); }
-  #record-view > .card:first-child .card-body { padding: 0 2px 6px; }
-  #question-text {
-    font-family: var(--read);
-    font-size: 26px;
-    font-weight: 600;
-    color: var(--ink);
-    line-height: 1.3;
-    letter-spacing: -0.005em;
-    text-wrap: balance;
-  }
-
-  /* ── Ground truth ── */
-  .disambig-item {
-    padding: 9px 0;
-    border-bottom: 1px solid #eef1f5;
-  }
-  .disambig-item:first-child { padding-top: 0; }
-  .disambig-item:last-child { border-bottom: none; padding-bottom: 0; }
-  .disambig-q { font-family: var(--read); color: var(--ink-2); font-style: italic; margin-bottom: 5px; font-size: 15px; }
-  .disambig-a { display: flex; gap: 6px; flex-wrap: wrap; }
-  .answer-pill {
-    background: #e7f6ec; color: #1f6f3d;
-    border: 1px solid #c9ead3;
-    padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600;
-  }
-
-  /* ── Belief state ── */
-  .toggle-btn {
-    font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer;
-    background: none; border: none; padding: 2px 0; text-decoration: underline;
-    text-decoration-color: rgba(49,80,200,.35); text-underline-offset: 3px;
-  }
-  .toggle-btn:hover { text-decoration-color: currentColor; }
-  .belief-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
-    gap: 10px;
-    margin-top: 10px;
-  }
-  .belief-sample {
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 13px;
-    color: var(--ink);
-    line-height: 1.45;
-  }
-  .belief-num {
-    font-weight: 700;
-    color: var(--muted);
-    min-width: 18px;
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
-  }
-  .belief-sample-header {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 6px;
-    flex-wrap: wrap;
-  }
-  .belief-sample-text { font-family: var(--read); font-size: 14px; color: var(--ink); line-height: 1.5; overflow-wrap: break-word; }
-  .group-badge {
-    font-size: 11px; font-weight: 700; padding: 1px 6px;
-    border-radius: 4px; border: 1px solid; white-space: nowrap;
-  }
-  .interp-badge { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
-
-  /* ── Belief legend ── */
-  .belief-legend { margin-bottom: 10px; display: flex; flex-direction: column; gap: 5px; }
-  .legend-section { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
-  .legend-title {
-    font-size: 12px; font-weight: 600;
-    color: var(--muted); white-space: nowrap; padding-top: 2px;
-  }
-  .legend-chip {
-    font-size: 12px; padding: 2px 8px; border-radius: 6px; border: 1px solid;
-    white-space: normal;
-  }
-  .legend-chip-interp { background: #ede9fe; color: #6d28d9; border-color: #ddd6fe; }
-
-  /* ── Strategy ── */
-  .strategy-badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: .01em;
-    white-space: nowrap;
-  }
-  .badge-clarify { background: #dbeafe; color: #1d4ed8; border: 1px solid #bfdbfe; }
-  .badge-direct  { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-  .badge-abstain { background: #fef3c7; color: #854d0e; border: 1px solid #fde68a; }
-
-  .reasoning-text { color: var(--ink); font-size: 14px; margin-top: 10px; }
-  .reasoning-text strong { font-family: var(--ui); font-size: 13px; color: var(--ink-2); }
-
-  .raw-response-block {
-    margin-top: 12px;
-    background: #f4f6fa;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 12px 14px;
-    font-size: 12px;
-    font-family: var(--mono);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    color: #2b3445;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-  .raw-section-label { font-weight: 700; color: var(--ink-2); }
-  .cluster-line { color: #1d4ed8; }
-  .interp-line  { color: #15803d; }
-
-  /* ── Conversation: a real chat — user on the right, assistant on the left ── */
-  .conv-turn {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  .conv-turn:last-child { margin-bottom: 0; }
-  .conv-turn:has(.icon-user) { flex-direction: row-reverse; padding-left: 8%; }
-  .conv-turn:has(.icon-assistant) { padding-right: 8%; }
-  .conv-turn:has(.icon-user) .conv-role { text-align: right; }
-  .conv-icon {
-    width: 30px; height: 30px;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 15px;
-    flex-shrink: 0;
-    margin-top: 18px;
-  }
-  .icon-assistant { background: #dfe7f6; }
-  .icon-user      { background: #ebe2fa; }
-  .conv-content { flex: 1; min-width: 0; }
-  .conv-role {
-    font-size: 12px; font-weight: 600;
-    color: var(--muted); margin-bottom: 4px;
-  }
-  .conv-role .strategy-badge { margin-left: 4px; vertical-align: 1px; }
-  .conv-text {
-    font-family: var(--read);
-    background: var(--asst);
-    border: 1px solid var(--asst-line);
-    border-radius: 4px 14px 14px 14px;
-    padding: 10px 14px;
-    font-size: 15px;
-    color: var(--ink);
-    line-height: 1.55;
-    overflow-wrap: break-word;
-    word-break: break-word;
-  }
-  .conv-turn:has(.icon-user) .conv-text {
-    background: var(--user);
-    border-color: var(--user-line);
-    border-radius: 14px 4px 14px 14px;
-  }
-  .conv-reasoning {
-    font-size: 12px; color: #6b5a2a;
-    background: #fdf8e8;
-    border-left: 3px solid #f0c64a;
-    padding: 5px 10px;
-    margin-bottom: 6px;
-    border-radius: 0 6px 6px 0;
-    font-style: italic;
-  }
-
-  /* ── Judge badge ── */
-  .judge-row {
-    display: flex; gap: 6px 8px; align-items: flex-start; flex-wrap: wrap;
-    margin-top: 8px; font-size: 13px;
-  }
-  .verdict-pass, .verdict-fail, .verdict-null {
-    padding: 1px 9px; border-radius: 999px; font-weight: 700; white-space: nowrap; font-size: 12px;
-  }
-  .verdict-pass { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-  .verdict-fail { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
-  .verdict-null { background: #f3f4f6; color: #6b7280; border: 1px solid #e5e7eb; }
-  .judge-reason { color: var(--ink-2); font-style: italic; flex: 1 1 240px; }
-  .judge-ref { font-size: 12px; color: var(--muted); background: #f3f5f8; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; word-break: break-word; }
-
-  /* ── Baseline answers ── */
-  .baseline-label { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
-  .baseline-text {
-    font-family: var(--read);
-    font-size: 15px; color: var(--ink);
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    padding: 10px 14px;
-    margin-bottom: 4px;
-    line-height: 1.55;
-    overflow-wrap: break-word;
-  }
-
-  /* ── Placeholder ── */
-  #placeholder {
-    text-align: center; color: var(--muted); padding: 60px 20px;
-  }
-  #placeholder h2 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
-  #placeholder code { background: #e6eaf0; padding: 2px 6px; border-radius: 3px; font-size: 13px; }
-
-  .hidden { display: none !important; }
-  .separator { border-top: 1px solid var(--line); margin: 14px 0; }
-
-  /* ── Intro banner ── */
-  #intro {
-    position: relative;
-    max-width: 880px;
-    margin: 24px auto 0;
-    padding: 16px 44px 16px 20px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-left: 4px solid var(--accent);
-    border-radius: 12px;
-    font-size: 14px;
-    line-height: 1.6;
-    color: var(--ink-2);
-  }
-  #intro p { margin: 0 0 8px 0; }
-  #intro p:last-child { margin-bottom: 0; }
-  #intro strong { color: var(--ink); }
-  #intro a { color: var(--accent); text-decoration: none; font-weight: 500; }
-  #intro a:hover { text-decoration: underline; }
-  #intro-close {
-    position: absolute; top: 8px; right: 10px;
-    background: none; border: none; cursor: pointer;
-    font-size: 20px; line-height: 1; color: var(--muted);
-    padding: 4px 8px; border-radius: 6px;
-  }
-  #intro-close:hover { background: rgba(0,0,0,0.05); color: var(--ink); }
-  #intro-show {
-    display: block; max-width: 880px; margin: 12px auto 0;
-    padding: 0 20px; font-size: 12px; color: var(--muted);
-  }
-  #intro-show a { color: var(--accent); cursor: pointer; text-decoration: none; }
-  #intro-show a:hover { text-decoration: underline; }
-
-  /* ── Parsed reasoner-output block ── */
-  .parsed-block {
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
-    border-radius: 6px 8px 8px 6px;
-    padding: 10px 14px;
-  }
-  .parsed-block .reasoning-text { margin: 0; padding: 4px 0; font-family: var(--read); font-size: 15px; line-height: 1.55; }
-  .parsed-block .reasoning-text + .reasoning-text {
-    border-top: 1px dashed var(--line);
-    margin-top: 4px;
-    padding-top: 8px;
-  }
-
-  /* ── Small screens ── */
-  @media (max-width: 640px) {
-    body { font-size: 15px; }
-
-    #intro { margin: 12px 12px 0; padding: 10px 36px 10px 12px; font-size: 13.5px; line-height: 1.5; }
-    #intro p { margin-bottom: 6px; }
-    #intro-show { padding: 0 12px; font-size: 13px; }
-
-    #topbar { padding: 12px; gap: 8px 10px; }
-    #topbar h1 { width: 100%; font-size: 18px; }
-    .cfg-group { flex: 1 1 calc(50% - 5px); min-width: 0; flex-direction: column; align-items: stretch; gap: 2px; }
-    #topbar label { font-size: 12px; }
-    #topbar select { width: 100%; font-size: 16px; padding: 7px 8px; } /* 16px avoids iOS zoom-on-focus */
-    #topbar button { width: 100%; padding: 10px 14px; font-size: 15px; }
-
-    #navbar { padding: 8px 12px; gap: 8px; flex-wrap: wrap; }
-    #navbar button { padding: 8px 16px; font-size: 14px; }
-    #record-info { font-size: 14px; }
-    #status { width: 100%; margin-left: 0; }
-
-    #main { margin: 16px auto; padding: 0 12px 48px; gap: 12px; }
-    .card-header { flex-wrap: wrap; padding: 10px 14px; font-size: 14px; }
-    .card-body { padding: 14px; }
-    #question-text { font-size: 22px; }
-
-    .toggle-btn { font-size: 13px; padding: 4px 0; }
-    .disambig-q { font-size: 15px; }
-    .answer-pill { font-size: 14px; }
-    .legend-title, .legend-chip { font-size: 13px; }
-    .group-badge { font-size: 12px; }
-    .belief-sample-text { font-size: 15px; }
-    .reasoning-text, .parsed-block .reasoning-text { font-size: 16px; }
-    .raw-response-block { font-size: 12.5px; }
-
-    .conv-turn { gap: 8px; }
-    .conv-turn:has(.icon-user) { padding-left: 0; }
-    .conv-turn:has(.icon-assistant) { padding-right: 0; }
-    .conv-icon { width: 26px; height: 26px; font-size: 13px; }
-    .conv-role { font-size: 13px; }
-    .conv-text, .baseline-text { font-size: 16px; }
-    .conv-reasoning { font-size: 13px; }
-    .judge-row { font-size: 14px; }
-    .verdict-pass, .verdict-fail, .verdict-null { font-size: 13px; }
-    .baseline-label { font-size: 13px; }
-  }
-
-  /* ── Undo classic-only treatments (this sheet is layered on top of it) ── */
-  .card-header, .legend-title, .conv-role, .baseline-label { text-transform: none; letter-spacing: normal; }
-  .strategy-badge { text-transform: none; }
-  #navbar button:hover:not(:disabled) { background: var(--surface); }
-
-  /* ── Centered layout (matches the classic sheet) ── */
-  #intro, #intro-show, #topbar, #navbar { width: min(840px, 100% - 40px); max-width: none; margin-left: auto; margin-right: auto; }
-  #intro-show { padding-left: 0; padding-right: 0; }
-  #topbar { margin-top: 16px; }
-  #main { margin-top: 16px; }
-  @media (max-width: 640px) {
-    #intro, #intro-show, #topbar, #navbar { width: calc(100% - 24px); }
-    #intro, #topbar { margin-top: 12px; }
-  }
-  #topbar { border-radius: 14px; }
-  #navbar {
-    top: 6px; margin-top: 8px;
-    border: 1px solid var(--line); border-radius: 14px;
-    box-shadow: 0 4px 14px rgba(22, 33, 58, .08);
-  }
-</style>
 </head>
 <body>
-
-<!-- ── Intro banner ── -->
-<div id="intro">
-  <button id="intro-close" title="Hide this banner">×</button>
-  <p>Interactive explorer to browse through data, generations and evaluations from the paper <a href="https://arxiv.org/pdf/2605.25831">Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</a>  &middot; <a href="https://github.com/jsbaan/belief-augmented-generation">Code</a>
-  &middot; <a href="https://huggingface.co/datasets/jsbaan/bag-paper-data">Data</a>.</p>
-
-  <p>Each record shows one <strong>question</strong> and its <strong>reference(s)</strong> from <a href="https://nlp.cs.washington.edu/ambigqa/">AmbigQA</a> (📚), the assistant LLM's (🤖) <strong>belief state</strong> (K sampled candidate answers), its augmentation <strong>output</strong> (a strategy, reasoning trace, and response), the resulting potentially multi-turn <strong>conversation</strong> with a simulated user (👤), reference-based LLM-judge verdicts (⚖️), and <strong>direct generation baselines</strong>.</p>
-
-  <p>Pick an assistant model, augmentation method (SAG is a prompt-only method, BAG1-3 exploit the belief state), optionally again for the second assistant turn (turn 4) after clarification. You can also pick a brevity-inducing prompt to shorten generations (and thus also the belief state)</p>
-</div>
-<div id="intro-show" class="hidden"><a>Show intro</a></div>
-
-<!-- ── Top bar ── -->
-<div id="topbar">
-  <h1>BAG Explorer</h1>
-
-  <div class="cfg-group" title="Assistant model that generates answers and picks a strategy">
-    <label>🤖 Assistant</label>
-    <select id="sel-model">
-      <option>qwen3-14b</option>
-      <option>olmo2-13b-instruct</option>
-      <option>olmo2-7b-instruct</option>
-      <option>olmo3-7b-instruct</option>
-      <option>qwen3-8b</option>
-      <option>gemini-2.5-flash</option>
-    </select>
+<header class="top" id="top">
+  <div class="brand">
+    <button class="browse-btn" id="browse-btn" aria-controls="rail">Browse</button>
+    <b>BAG Explorer</b>
+    <nav>
+      <a href="https://arxiv.org/pdf/2605.25831" target="_blank" rel="noopener">Paper</a>
+      <a href="https://github.com/jsbaan/belief-augmented-generation" target="_blank" rel="noopener">Code</a>
+      <a href="https://huggingface.co/datasets/jsbaan/bag-paper-data" target="_blank" rel="noopener">Data</a>
+      <button class="linkbtn" id="about-btn">About</button>
+      <button class="linkbtn" id="theme-btn" title="Switch between system, light and dark theme">Theme: System</button>
+    </nav>
   </div>
-
-  <div class="cfg-group" title="Which method chose the strategy — SAG conditions on the question alone; BAG1/2/3 condition additionally on the K belief-state samples (three prompt variants).">
-    <label> Method</label>
-    <select id="sel-rp">
-      <option value="belief7">BAG3</option>
-      <option value="belief6">BAG2</option>
-      <option value="belief">BAG1</option>
-      <option value="prompt">SAG</option>
-    </select>
+  <button class="cfg-btn mono" id="cfg-btn" aria-controls="config" aria-expanded="false"></button>
+  <div class="config" id="config">
+    <div class="cfg"><label for="sel-model">Assistant</label><select id="sel-model"></select></div>
+    <div class="cfg"><label for="sel-dp">Brevity</label><select id="sel-dp"></select></div>
+    <div class="cfg"><span class="k">Seed</span><span class="v" id="v-seed"></span></div>
+    <div class="cfg"><span class="k">Split</span><span class="v" id="v-split"></span></div>
+    <div class="cfg"><span class="k">User</span><span class="v" id="v-user"></span></div>
+    <div class="cfg"><span class="k">Judge</span><span class="v" id="v-judge"></span></div>
   </div>
+  <span class="status" id="status" role="status"></span>
+</header>
 
-  <div class="cfg-group" title="Method used for the assistant's turn-4 answer after the clarification exchange. baseline = forced answer (no abstain). SAG+ = prompt-only, may abstain. BAG+ = re-sample K beliefs then take consensus, may abstain.">
-    <label> Turn 4 method</label>
-    <select id="sel-fp">
-      <option value="prompt">baseline</option>
-      <option value="prompt1">SAG+</option>
-      <option value="belief">BAG+</option>
-    </select>
+<div class="about" id="about" hidden>
+  <div class="about-inner">
+    <h2>About this explorer</h2>
+    <p>Browse the questions, generations and evaluations from <a href="https://arxiv.org/pdf/2605.25831" target="_blank" rel="noopener">Clarify, Abstain or Answer? Strategising in Conversation with Belief-Augmented Generation</a> (INLG 2026).</p>
+    <p>Each record starts from an <a href="https://nlp.cs.washington.edu/ambigqa/" target="_blank" rel="noopener">AmbigQA</a> question. The assistant samples K answers (its <strong>belief state</strong>), then picks a strategy: answer, ask a clarification question, or abstain. SAG picks from the question alone; BAG1–3 also see the belief state. A simulated user, who has one hidden AmbigQA interpretation in mind, answers any clarification question, and the assistant answers again in turn 4 (forced answer, or SAG+/BAG+, which may still abstain). An LLM judge scores answers against the reference for the user's intended interpretation.</p>
+    <p>The coloured claim clusters and per-sample ✓/✗ marks in the belief state are an evaluation overlay: the judge model groups the samples after the fact for the faithfulness analysis, and BAG never sees them. Turn them off with the <em>Judge clusters</em> switch. BAG3 also clusters its own samples as part of its output; you can see that grouping in its raw output in turn 2.</p>
+    <p>Use the list on the left to filter records, the method row to compare strategies on the same question, and ← → (or j/k) to step through records.</p>
+    <button class="about-close" id="about-close">Close</button>
   </div>
-
-  <div class="cfg-group" title="Model that simulates the user's reply to a clarification question, conditioned on a hidden AmbigQA disambiguation">
-    <label>👤 User</label>
-    <select id="sel-um">
-      <option>gemini-2.5-flash</option>
-    </select>
-  </div>
-
-  <div class="cfg-group" title="Reference-based LLM judge that scores each generation pass/fail against the AmbigQA references">
-    <label>⚖️ Judge</label>
-    <select id="sel-jm">
-      <option>gemini-2.5-flash</option>
-    </select>
-  </div>
-
-  <div class="cfg-group" title="Brevity instruction for the direct answer step (free = no instruction, concise = 'be concise', sentence = 'answer in one sentence')">
-    <label>Brevity</label>
-    <select id="sel-dp">
-      <option value="vanilla">free</option>
-      <option value="concise">concise</option>
-      <option value="sentence">sentence</option>
-    </select>
-  </div>
-
-  <div class="cfg-group" title="Random seed used for generation">
-    <label>Seed</label>
-    <select id="sel-seed">
-      <option>50</option>
-      <option>42</option>
-    </select>
-  </div>
-
-  <div class="cfg-group">
-    <label>Split</label>
-    <select id="sel-split">
-      <option value="dev">dev</option>
-      <option value="train">train</option>
-    </select>
-  </div>
-
-  <button id="load-btn">Load</button>
 </div>
 
-<!-- ── Nav bar ── -->
-<div id="navbar">
-  <button id="prev-btn" disabled>← Prev</button>
-  <button id="next-btn" disabled>Next →</button>
-  <span id="record-info">–</span>
-  <span id="status"></span>
-</div>
-
-<!-- ── Main ── -->
-<div id="main">
-  <div id="placeholder">
-    <h2>Select a config and click Load</h2>
-  </div>
-
-  <div id="record-view" class="hidden">
-
-    <!-- Question -->
-    <div class="card">
-      <div class="card-header"><span title="Source: AmbigQA dataset">📚</span> AmbigQA question (turn 1)</div>
-      <div class="card-body">
-        <div id="question-text"></div>
+<div class="shell">
+  <aside class="rail" id="rail" aria-label="Records">
+    <div class="filters">
+      <input type="search" id="f-q" placeholder="Search questions  ( / )" aria-label="Search questions">
+      <div class="frow">
+        <select id="f-strategy" aria-label="Strategy">
+          <option value="">Any strategy</option>
+          <option value="answer">Answered</option>
+          <option value="clarify">Clarified</option>
+          <option value="abstain">Abstained</option>
+        </select>
+        <select id="f-outcome" aria-label="Outcome">
+          <option value="">Any outcome</option>
+          <option value="pass">Judged correct</option>
+          <option value="fail">Judged wrong</option>
+          <option value="none">Not judged</option>
+        </select>
+        <select id="f-amb" aria-label="Ambiguity">
+          <option value="">All questions</option>
+          <option value="amb">Ambiguous</option>
+          <option value="unamb">Unambiguous</option>
+        </select>
+        <select id="f-claims" aria-label="Distinct claims in belief state">
+          <option value="">Claims (judge)</option>
+          <option value="1">Judge: 1 claim</option>
+          <option value="2-4">Judge: 2–4 claims</option>
+          <option value="5+">Judge: 5+ claims</option>
+        </select>
       </div>
+      <label class="fcheck"><input type="checkbox" id="f-disagree"> Methods pick different strategies</label>
+      <div class="fcount"><span id="f-count"></span><button class="textbtn" id="f-reset" hidden>Reset</button></div>
     </div>
+    <div class="list" id="list"></div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
 
-    <!-- Ground truth -->
-    <div class="card">
-      <div class="card-header"><span title="Source: AmbigQA dataset">📚</span> AmbigQA references</div>
-      <div class="card-body" id="ground-truth-body"></div>
+  <main class="main">
+    <div class="col" id="col">
+      <div class="placeholder" id="placeholder">Loading records…</div>
     </div>
-
-    <!-- Belief state -->
-    <div class="card">
-      <div class="card-header">
-        <span title="Source: assistant model">🤖</span> Belief state
-        <button class="toggle-btn" id="belief-toggle">show</button>
-        <button class="toggle-btn" id="claim-annotations-toggle" style="margin-left:6px"
-                title="Source: LLM judge — clusters belief samples post-hoc into groups of semantically equivalent claims. Not part of the assistant model's output.">⚖️ claim annotations: off</button>
-        <!-- Hidden for the public demo — kept in JS for internal use.
-        <button class="toggle-btn" id="interp-badge-toggle" style="margin-left:6px">interps: on</button>
-        <button class="toggle-btn" id="judge1-toggle" style="margin-left:6px">1-intent: off</button>
-        <button class="toggle-btn" id="judgeAny-toggle" style="margin-left:6px">any-intent: off</button>
-        -->
-        <span id="belief-counts" style="font-size:11px;color:#aaa;margin-left:auto;font-weight:400;text-transform:none;letter-spacing:0"></span>
-      </div>
-      <div class="card-body" id="belief-body" style="display:none"></div>
-    </div>
-
-    <!-- Strategy -->
-    <div class="card">
-      <div class="card-header">
-        <span title="Source: assistant model (reasoner)">🤖</span> Augmentation output (turn 2)
-        <span id="strategy-badge"></span>
-        <button class="toggle-btn" id="raw-output-toggle" style="margin-left:auto">show raw</button>
-      </div>
-      <div class="card-body" id="strategy-body"></div>
-    </div>
-
-    <!-- Conversation -->
-    <div class="card" id="conv-card">
-      <div class="card-header">Full conversation with a simulated user</div>
-      <div class="card-body" id="conv-body"></div>
-    </div>
-
-    <!-- Turn 4 intermediate belief state (BAG+) -->
-    <div class="card">
-      <div class="card-header">
-        <span title="Source: assistant model, only when Turn 4 method = BAG+">🤖</span> Augmentation output (turn 4 - optional)
-<!--        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#aaa">(optional)</span>-->
-        <button class="toggle-btn" id="final-belief-toggle" style="margin-left:auto">show</button>
-      </div>
-      <div class="card-body" id="final-belief-body" style="display:none"></div>
-    </div>
-
-    <!-- Baselines -->
-    <div class="card">
-      <div class="card-header">Direct generation (no augmentation method)</div>
-      <div class="card-body" id="baselines-body"></div>
-    </div>
-
-  </div>
+  </main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script>
-// ── Intro banner dismiss ──────────────────────────────────────────────────
-(function () {
-  const intro = document.getElementById('intro');
-  const show  = document.getElementById('intro-show');
-  const KEY   = 'bagViewerIntroHidden';
-  if (localStorage.getItem(KEY) === '1') {
-    intro.classList.add('hidden');
-    show.classList.remove('hidden');
-  }
-  document.getElementById('intro-close').addEventListener('click', () => {
-    intro.classList.add('hidden');
-    show.classList.remove('hidden');
-    localStorage.setItem(KEY, '1');
-  });
-  show.querySelector('a').addEventListener('click', () => {
-    intro.classList.remove('hidden');
-    show.classList.add('hidden');
-    localStorage.removeItem(KEY);
-  });
+// ─────────────────────────────────────────────────────────────────────────────
+// Config
+// The paper uses SAG / BAG1-3 and "free"; filenames use prompt / belief / belief6 /
+// belief7 and vanilla (see nb_utils.py _prettify_*). Internal names stay as values.
+// ─────────────────────────────────────────────────────────────────────────────
+const MODELS  = ['qwen3-14b', 'olmo2-13b-instruct', 'olmo2-7b-instruct', 'olmo3-7b-instruct', 'qwen3-8b', 'gemini-2.5-flash'];
+const METHODS = ['prompt', 'belief', 'belief6', 'belief7'];
+const METHOD_LABEL = { prompt: 'SAG', belief: 'BAG1', belief6: 'BAG2', belief7: 'BAG3' };
+const BREVITY = { vanilla: 'free', concise: 'concise', sentence: 'sentence' };
+// The released data (Hugging Face jsbaan/bag-paper-data) has one seed and the dev split only.
+const SEEDS  = ['50'];
+const SPLITS = ['dev'];
+const USER_MODEL = 'gemini-2.5-flash', JUDGE_MODEL = 'gemini-2.5-flash';
+const HF_BASE = 'https://huggingface.co/datasets/jsbaan/bag-paper-data/resolve/main/';
+
+const EMBED = (() => {
+  const el = document.getElementById('bag-embed');
+  if (!el) return null;
+  try { return JSON.parse(el.textContent); } catch { return null; }
 })();
 
-// ── Paper-facing prompt names ─────────────────────────────────────────────
-// The paper uses SAG / BAG1-3 and "free"; the code and JSONL filenames use
-// prompt / belief / belief6 / belief7 and vanilla. We keep the internal names
-// as <select> `value` attributes (buildFnames() and the raw data depend on
-// them) and only remap for display. Canonical source: nb_utils.py
-// `_prettify_reasoner_prompt` / `_prettify_direct_prompt`. If those change,
-// update the maps below to match.
-const REASONER_LABEL = { prompt: 'SAG', belief: 'BAG1', belief6: 'BAG2', belief7: 'BAG3' };
-const DIRECT_LABEL   = { vanilla: 'free' };
-const prettyReasoner = k => REASONER_LABEL[k] ?? k;
-const prettyDirect   = k => DIRECT_LABEL[k]   ?? k;
+const S = {
+  model: 'qwen3-14b', brevity: 'vanilla', seed: '50', split: 'dev',
+  method: 'belief7', t4: 'plus',
+  ids: [], filtered: [], cur: null, pendingId: null,
+  f: { q: '', strategy: '', outcome: '', amb: '', claims: '', disagree: false },
+  samplesOpen: false, judgeOverlay: true,
+};
+let D = { base: null, meth: {}, done: {} };
 
-// ── File-name builder (mirrors config.py build_output_fname) ──────────────
-function buildFnames({ assistant_model: am, direct_prompt: dp, reasoner_prompt: rp, seed, user_model: um, judge_model: jm, final_prompt: fp }) {
+const $ = id => document.getElementById(id);
+const fpFor   = (m, t4) => t4 === 'plus' ? (m === 'prompt' ? 'prompt1' : 'belief') : 'prompt';
+const t4Label = (m, t4) => t4 === 'plus' ? (m === 'prompt' ? 'SAG+' : 'BAG+') : 'baseline';
+
+// Mirrors config.py build_output_fname.
+function buildFnames({ am, dp, rp, seed, um, jm, fp }) {
   const dpKey  = (dp && dp !== 'vanilla') ? `_${dp}` : '';
-  // belief_sampling assumed 'unbiased' → no sampling key
   const downDp = (rp && rp.includes('belief')) ? dpKey : '';
   const fpKey  = fp ? `_${fp}` : '';
-
   return {
-    direct:        `direct_${am}${dpKey}_${seed}.jsonl`,
-    disambiguated: `disambiguated_${am}${dpKey}_${seed}.jsonl`,
-    clarify:       `clarify_${am}${downDp}_${seed}_${rp}.jsonl`,
-    user:          `user_${am}_${um}${downDp}_${seed}_${rp}.jsonl`,
-    final:         `final_${am}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
-    judge_direct:  `judge_direct_${am}_${jm}${dpKey}_${seed}.jsonl`,
-    judge_belief:  `judge_belief_${am}_${jm}${dpKey}_${seed}.jsonl`,
-    judge_disambig: `judge_disambig_${am}_${jm}${dpKey}_${seed}.jsonl`,
-    judge_clarify: `judge_clarify_${am}_${jm}${downDp}_${seed}_${rp}.jsonl`,
-    judge_final:   `judge_final_${am}_${jm}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
-    claim_var:     `claim_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
-    interp_var:    `interpretation_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
-    // Turn-4 (BAG+) belief-state claim clusters — only meaningful when final_prompt='belief'.
+    direct:          `direct_${am}${dpKey}_${seed}.jsonl`,
+    disambiguated:   `disambiguated_${am}${dpKey}_${seed}.jsonl`,
+    clarify:         `clarify_${am}${downDp}_${seed}_${rp}.jsonl`,
+    user:            `user_${am}_${um}${downDp}_${seed}_${rp}.jsonl`,
+    final:           `final_${am}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
+    judge_direct:    `judge_direct_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    judge_belief:    `judge_belief_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    judge_disambig:  `judge_disambig_${am}_${jm}${dpKey}_${seed}.jsonl`,
+    judge_clarify:   `judge_clarify_${am}_${jm}${downDp}_${seed}_${rp}.jsonl`,
+    judge_final:     `judge_final_${am}_${jm}_${um}${downDp}_${seed}_${rp}${fpKey}.jsonl`,
+    claim_var:       `claim_variation_${am}_${jm}${dpKey}_${seed}.jsonl`,
     claim_var_final: `claim_variation_final_${am}_${um}_${jm}${downDp}_${seed}_${rp}.jsonl`,
   };
 }
+const cfgFor = (rp, fp) => ({ am: S.model, dp: S.brevity, rp, seed: S.seed, um: USER_MODEL, jm: JUDGE_MODEL, fp });
 
-// ── JSONL loader ──────────────────────────────────────────────────────────
-async function loadJsonl(path) {
-  const resp = await fetch(path);
-  if (!resp.ok) { console.warn(`Missing: ${path}`); return []; }
-  const text = await resp.text();
-  return text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Data loading: docs/data/<split>/<name>.json first (trimmed copy from
+// build_demo_data.py), then the full file on Hugging Face. Cached per file.
+// ─────────────────────────────────────────────────────────────────────────────
+const parseLines = text => text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+const EMPTY = { rows: [], map: new Map() };
+const fileCache = new Map();
+const LOCAL = new Set();  // files served from docs/data (small, gzipped)
 
-// Prefer the trimmed copy shipped with the site (docs/data/, built by
-// build_demo_data.py: same records, only the fields shown here, served gzipped),
-// and fall back to the full file on Hugging Face if there is none.
-async function loadDemoFile(localBase, remoteBase, fname) {
+async function fetchRows(split, fname) {
+  if (EMBED) return EMBED.files[fname.replace(/\.jsonl$/, '.json')] || [];
   try {
-    const resp = await fetch(localBase + fname.replace(/\.jsonl$/, '.json'));
-    if (resp.ok) {
-      const text = await resp.text();
-      return text.trim().split('\n').map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
-    }
-  } catch (e) { /* fall through to Hugging Face */ }
-  return loadJsonl(remoteBase + fname);
-}
-
-// ── State ─────────────────────────────────────────────────────────────────
-let records = [];  // joined records, ordered as in direct file
-let idx = 0;
-
-// ── Shareable links ───────────────────────────────────────────────────────
-// The URL mirrors the current config and record, e.g.
-//   ?model=qwen3-14b&method=BAG3&turn4=BAG%2B&id=3312525434538504362
-// Values match either a <select> option's value or its label.
-const URL_PARAMS = {
-  model: 'sel-model', method: 'sel-rp', turn4: 'sel-fp', user: 'sel-um',
-  judge: 'sel-jm', brevity: 'sel-dp', seed: 'sel-seed', split: 'sel-split',
-};
-let pendingId = null;  // record to show after the next load (from the URL or the previous config)
-
-function applyUrlParams() {
-  let params;
-  try { params = new URLSearchParams(window.location.search); } catch { return; }
-  for (const [key, selId] of Object.entries(URL_PARAMS)) {
-    const want = params.get(key);
-    if (want == null) continue;
-    const sel = document.getElementById(selId);
-    const opt = [...sel.options].find(o => o.value === want || o.text === want);
-    if (opt) sel.value = opt.value;
-  }
-  pendingId = params.get('id');
-}
-
-function updateUrl() {
+    const r = await fetch(`data/${split}/${fname.replace(/\.jsonl$/, '.json')}`);
+    if (r.ok) { LOCAL.add(fname); return parseLines(await r.text()); }
+  } catch { /* fall through */ }
   try {
-    const params = new URLSearchParams();
-    for (const [key, selId] of Object.entries(URL_PARAMS)) {
-      const sel = document.getElementById(selId);
-      params.set(key, sel.options[sel.selectedIndex].text);
-    }
-    if (records[idx]) params.set('id', records[idx].id);
-    history.replaceState(null, '', '?' + params.toString());
-  } catch { /* e.g. unsupported in some sandboxes — the page works without it */ }
+    const remote = (split === 'train' ? HF_BASE : `${HF_BASE}${split}/`) + fname;
+    const r = await fetch(remote);
+    if (r.ok) return parseLines(await r.text());
+  } catch { /* missing */ }
+  console.warn('Missing file:', fname);
+  return [];
 }
-
-// ── Load ──────────────────────────────────────────────────────────────────
-document.getElementById('load-btn').addEventListener('click', loadData);
-
-async function loadData() {
-  const cfg = {
-    assistant_model: document.getElementById('sel-model').value,
-    direct_prompt:   document.getElementById('sel-dp').value,
-    reasoner_prompt: document.getElementById('sel-rp').value,
-    seed:            document.getElementById('sel-seed').value,
-    user_model:      document.getElementById('sel-um').value,
-    judge_model:     document.getElementById('sel-jm').value,
-    final_prompt:    document.getElementById('sel-fp').value,
-  };
-
-  // Stay on the same question when switching configs.
-  if (pendingId == null && records[idx]) pendingId = records[idx].id;
-
-  setStatus('Loading…');
-  document.getElementById('load-btn').disabled = true;
-
-  const split = document.getElementById('sel-split').value;
-  // For local files
-  // const base = split === 'train' ? '../data/generations/' : `../data/generations/${split}/`;
-  const HF_BASE = 'https://huggingface.co/datasets/jsbaan/bag-paper-data/resolve/main/';
-  const base = split === 'train' ? HF_BASE : `${HF_BASE}${split}/`;
-  const localBase = `data/${split}/`;
-  const load = fname => loadDemoFile(localBase, base, fname);
-
-  const fnames = buildFnames(cfg);
-  console.log('Loading files:', fnames);
-
-  try {
-    const [direct, disamb, clarify, user, final, jDirect, jBelief, jDisamb, jClarify, jFinal, claimVar, interpVar, claimVarFinal] = await Promise.all([
-      load(fnames.direct),
-      load(fnames.disambiguated),
-      load(fnames.clarify),
-      load(fnames.user),
-      load(fnames.final),
-      load(fnames.judge_direct),
-      load(fnames.judge_belief),
-      load(fnames.judge_disambig),
-      load(fnames.judge_clarify),
-      load(fnames.judge_final),
-      load(fnames.claim_var),
-      load(fnames.interp_var),
-      load(fnames.claim_var_final),
-    ]);
-
-    // Index secondary files by id for O(1) lookup
-    const byId = arr => Object.fromEntries(arr.map(r => [r.id, r]));
-    const disambById  = byId(disamb);
-    const clarifyById = byId(clarify);
-    const userById    = byId(user);
-    const finalById   = byId(final);
-    const jdById      = byId(jDirect);
-    const jbById      = byId(jBelief);
-    const jdbById     = byId(jDisamb);
-    const jcById      = byId(jClarify);
-    const jfById      = byId(jFinal);
-    const cvById      = byId(claimVar);
-    const ivById      = byId(interpVar);
-    const cvfById     = byId(claimVarFinal);
-
-    // Build joined records in order of the direct file
-    records = direct.map(d => ({
-      id:       d.id,
-      direct:   d,
-      disamb:   disambById[d.id]  || null,
-      clarify:  clarifyById[d.id] || null,
-      user:     userById[d.id]    || null,
-      final:    finalById[d.id]   || null,
-      jDirect:  jdById[d.id]      || null,
-      jBelief:  jbById[d.id]      || null,
-      jDisamb:  jdbById[d.id]     || null,
-      jClarify: jcById[d.id]      || null,
-      jFinal:   jfById[d.id]      || null,
-      cvFinal:  cvfById[d.id]     || null,
-      claimVar: cvById[d.id]      || null,
-      interpVar: ivById[d.id]     || null,
+function getFile(split, fname) {
+  const key = split + '/' + fname;
+  if (!fileCache.has(key)) {
+    fileCache.set(key, fetchRows(split, fname).then(rows => {
+      const map = new Map();
+      for (const r of rows) if (r && r.id != null) map.set(String(r.id), r);
+      return { rows, map };
     }));
-
-    if (records.length === 0) {
-      setStatus('No records found — check console for missing files');
-      document.getElementById('load-btn').disabled = false;
-      return;
-    }
-
-    const keep = pendingId != null ? records.findIndex(r => String(r.id) === String(pendingId)) : -1;
-    idx = keep >= 0 ? keep : 0;
-    pendingId = null;
-    document.getElementById('placeholder').classList.add('hidden');
-    document.getElementById('record-view').classList.remove('hidden');
-    render();
-    setStatus(`Loaded ${records.length} records`);
-  } catch (e) {
-    setStatus('Error: ' + e.message);
-    console.error(e);
   }
-
-  document.getElementById('load-btn').disabled = false;
+  return fileCache.get(key);
 }
 
-// ── Navigation ────────────────────────────────────────────────────────────
-document.getElementById('prev-btn').addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
-document.getElementById('next-btn').addEventListener('click', () => { if (idx < records.length - 1) { idx++; render(); } });
+async function loadBase() {
+  const f = buildFnames(cfgFor('belief7', 'prompt'));
+  const names = [f.direct, f.disambiguated, f.judge_direct, f.judge_belief, f.judge_disambig, f.claim_var];
+  const [direct, disamb, jDirect, jBelief, jDisamb, claimVar] = await Promise.all(names.map(n => getFile(S.split, n)));
+  return { direct, disamb, jDirect, jBelief, jDisamb, claimVar };
+}
+async function loadMethod(m, t4) {
+  const fp = fpFor(m, t4);
+  const f = buildFnames(cfgFor(m, fp));
+  const names = [f.clarify, f.judge_clarify, f.user, f.final, f.judge_final, fp === 'belief' ? f.claim_var_final : null];
+  const [clarify, jClarify, user, final, jFinal, cvFinal] =
+    await Promise.all(names.map(n => n ? getFile(S.split, n) : Promise.resolve(EMPTY)));
+  return { clarify, jClarify, user, final, jFinal, cvFinal, fp };
+}
+const methKey = m => m + '|' + fpFor(m, S.t4);
+function ensureMethod(m) {
+  const k = methKey(m);
+  if (!D.meth[k]) D.meth[k] = loadMethod(m, S.t4).then(x => (D.done[k] = x));
+  return D.meth[k];
+}
+const M = m => D.done[methKey(m)] || null;
 
-document.addEventListener('keydown', e => {
-  if (records.length === 0) return;
-  if (e.key === 'ArrowLeft'  && idx > 0)                { idx--; render(); }
-  if (e.key === 'ArrowRight' && idx < records.length-1) { idx++; render(); }
-});
-
-// ── Render ────────────────────────────────────────────────────────────────
-function render() {
-  const rec = records[idx];
-  document.getElementById('record-info').textContent = `Record ${idx + 1} / ${records.length}`;
-  document.getElementById('prev-btn').disabled = idx === 0;
-  document.getElementById('next-btn').disabled = idx === records.length - 1;
-
-  updateUrl();
-
-  // scroll to top
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-
-  renderQuestion(rec);
-  renderGroundTruth(rec);
-  renderBeliefState(rec);
-  renderStrategy(rec);
-  renderConversation(rec);
-  renderFinalBeliefState(rec);
-  renderBaselines(rec);
+let loadToken = 0;
+async function loadAll() {
+  const tok = ++loadToken;
+  D = { base: null, meth: {}, done: {} };
+  setStatus('Loading ' + S.model + '…');
+  const base = await loadBase();
+  if (tok !== loadToken) return;
+  D.base = base;
+  S.ids = base.direct.rows.map(r => String(r.id));
+  if (!S.ids.length) {
+    $('col').innerHTML = `<div class="placeholder">Couldn't load any records for this configuration.<br>This page reads <code>data/${esc(S.split)}/</code> next to it, then falls back to the Hugging Face dataset. Open it from the repo's <code>docs/</code> folder through a local server (<code>python -m http.server</code>) or on the deployed site. The browser console lists the files it tried.</div>`;
+    $('list').innerHTML = '';
+    setStatus('');
+    return;
+  }
+  await ensureMethod(S.method);
+  if (tok !== loadToken) return;
+  const want = S.pendingId ?? S.cur;
+  S.cur = (want != null && base.direct.map.has(String(want))) ? String(want) : S.ids[0];
+  S.pendingId = null;
+  applyFilters(); renderList(); renderRecord();
+  setStatus('');
+  // With the trimmed local copy, fetch every method up front for the comparison row.
+  // From Hugging Face the files are large, so other methods load when clicked.
+  if (autoLoadOthers()) loadOthers(tok);
+}
+function autoLoadOthers() {
+  if (EMBED) return true;
+  return LOCAL.has(buildFnames(cfgFor('belief7', 'prompt')).direct);
+}
+function loadOthers(tok) {
+  for (const m of METHODS) {
+    if (M(m)) continue;
+    ensureMethod(m).then(() => { if (tok === loadToken) scheduleRefresh(); });
+  }
+}
+let refreshTimer = null;
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    renderCompare();
+    if (S.f.disagree) { applyFilters(); renderList(); }
+  }, 60);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Derived values
+// ─────────────────────────────────────────────────────────────────────────────
+function norm(s) {
+  s = (s || '').toLowerCase();
+  if (s.includes('clarif')) return 'clarify';
+  if (s.includes('abstain')) return 'abstain';
+  if (s.includes('direct') || s.includes('answer')) return 'answer';
+  return null;
+}
+const directRec = id => D.base.direct.map.get(id);
+const isAmb = id => (directRec(id)?.context?.disambiguations || []).length > 0;
+const claimsOf = id => D.base.claimVar.map.get(id)?.generations?.claim_variation || null;
+const nClaims = id => claimsOf(id)?.n_distinct_claims ?? null;
+
+function outcome(m, id) {
+  const md = M(m);
+  if (!md) return D.meth[methKey(m)] ? { loading: true } : { notLoaded: true };
+  const c = md.clarify.map.get(id)?.generations;
+  const st = norm(c?.strategy);
+  if (!st) return { strategy: null, verdict: null };
+  if (st === 'answer') {
+    const j = md.jClarify.map.get(id)?.generations?.reason_direct;
+    return { strategy: st, verdict: j?.verdict ?? null };
+  }
+  if (st === 'abstain') return { strategy: st, verdict: null };
+  const fg = md.final.map.get(id)?.generations;
+  const fst = (fg && !Array.isArray(fg)) ? norm(fg.strategy) : (fg ? 'answer' : null);
+  const j = md.jFinal.map.get(id)?.generations?.final;
+  return { strategy: st, finalStrategy: fst, verdict: j?.verdict ?? null };
+}
+function strategyText(o) {
+  if (o.loading) return 'loading…';
+  if (o.notLoaded) return 'click to load';
+  if (!o.strategy) return 'no output';
+  if (o.strategy === 'clarify') return o.finalStrategy === 'abstain' ? 'clarify → abstain' : 'clarify → answer';
+  return o.strategy;
+}
+const vMark  = v => v === 1 ? '✓' : v === 0 ? '✗' : '–';
+const vClass = v => v === 1 ? 'v-pass' : v === 0 ? 'v-fail' : 'v-none';
+const vWord  = v => v === 1 ? 'correct' : v === 0 ? 'wrong' : 'not judged';
+
+function refFor(id) {
+  const r = D.base.jDirect.map.get(id)?.context?.direct_ref;
+  return Array.isArray(r) ? r.join(' / ') : (r || null);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Filters + list
+// ─────────────────────────────────────────────────────────────────────────────
+function applyFilters() {
+  const f = S.f, q = f.q.trim().toLowerCase();
+  const allLoaded = METHODS.every(m => M(m));
+  S.filtered = S.ids.filter(id => {
+    if (q && !(directRec(id)?.context?.question || '').toLowerCase().includes(q)) return false;
+    if (f.amb && (f.amb === 'amb') !== isAmb(id)) return false;
+    if (f.claims) {
+      const n = nClaims(id);
+      if (n == null) return false;
+      if (f.claims === '1' && n !== 1) return false;
+      if (f.claims === '2-4' && (n < 2 || n > 4)) return false;
+      if (f.claims === '5+' && n < 5) return false;
+    }
+    if (f.strategy || f.outcome) {
+      const o = outcome(S.method, id);
+      if (f.strategy && o.strategy !== f.strategy) return false;
+      if (f.outcome === 'pass' && o.verdict !== 1) return false;
+      if (f.outcome === 'fail' && o.verdict !== 0) return false;
+      if (f.outcome === 'none' && o.verdict != null) return false;
+    }
+    if (f.disagree && allLoaded) {
+      const s = new Set(METHODS.map(m => outcome(m, id).strategy).filter(Boolean));
+      if (s.size < 2) return false;
+    }
+    return true;
+  });
+  const active = f.q || f.strategy || f.outcome || f.amb || f.claims || f.disagree;
+  $('f-count').textContent = active
+    ? `${S.filtered.length.toLocaleString('en')} of ${S.ids.length.toLocaleString('en')} records · ${METHOD_LABEL[S.method]}`
+    : `${S.ids.length.toLocaleString('en')} records · outcomes for ${METHOD_LABEL[S.method]}`;
+  $('f-reset').hidden = !active;
+}
+
+function clusterOrder(claims, k) {
+  // Returns clusters sorted by size, each { label, rep, type, idx:[0-based], color }
+  const out = [];
+  const seen = new Set();
+  for (const c of (claims || [])) {
+    const idx = (c.sample_indices || []).map(i => i - 1).filter(i => i >= 0 && i < k && !seen.has(i));
+    idx.forEach(i => seen.add(i));
+    if (idx.length) out.push({ label: c.label, rep: c.representative || c.label, type: c.type || 'content', idx: idx.sort((a, b) => a - b) });
+  }
+  const rest = [];
+  for (let i = 0; i < k; i++) if (!seen.has(i)) rest.push(i);
+  out.sort((a, b) => b.idx.length - a.idx.length);
+  if (rest.length) out.push({ label: '?', rep: 'Not clustered', type: 'none', idx: rest });
+  out.forEach((c, i) => { c.color = c.type === 'none' ? 'var(--line)' : `var(--c${i % 10})`; });
+  return out;
+}
+
+function miniBar(id) {
+  if (!S.judgeOverlay) return '';
+  const cv = claimsOf(id);
+  const k = directRec(id)?.generations?.belief_state?.length || 10;
+  if (!cv) return '';
+  const cl = clusterOrder(cv.claims, k);
+  let at = 0;
+  const stops = cl.map(c => {
+    const a = at / k * 100, b = (at + c.idx.length) / k * 100;
+    at += c.idx.length;
+    return `${c.color} ${a}% ${b}%`;
+  });
+  return `<span class="mini" style="background:linear-gradient(90deg,${stops.join(',')})" title="${cv.n_distinct_claims} distinct claims"></span>`;
+}
+
+function renderList() {
+  const el = $('list');
+  if (!S.filtered.length) { el.innerHTML = '<div class="empty-list">No records match these filters.</div>'; return; }
+  el.innerHTML = S.filtered.map(id => {
+    const q = directRec(id)?.context?.question || '';
+    const o = outcome(S.method, id);
+    const st = o.strategy ? `<span class="s-${o.strategy}">${o.strategy === 'clarify' ? 'clarified' : o.strategy === 'answer' ? 'answered' : 'abstained'}</span>` : '';
+    const v = o.strategy && o.strategy !== 'abstain' ? `<span class="${vClass(o.verdict)}">${vMark(o.verdict)}</span>` : '';
+    return `<button class="row${id === S.cur ? ' is-current' : ''}" data-id="${esc(id)}">
+      <span class="row-q">${esc(q)}</span>
+      <span class="row-meta">${miniBar(id)}${st}${v}${isAmb(id) ? '<span>ambiguous</span>' : ''}</span>
+    </button>`;
+  }).join('');
+  markCurrent();
+}
+function markCurrent() {
+  const list = $('list');
+  list.querySelectorAll('.row.is-current').forEach(r => r.classList.remove('is-current'));
+  const row = list.querySelector(`.row[data-id="${CSS.escape(S.cur || '')}"]`);
+  if (row) { row.classList.add('is-current'); row.scrollIntoView({ block: 'nearest' }); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rendering helpers
+// ─────────────────────────────────────────────────────────────────────────────
 function esc(s) {
   if (s == null) return '';
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-
-// Render model output as markdown (sanitized). Falls back to escaped text with
-// line breaks if the CDN libraries didn't load.
 function md(s) {
-  if (s == null || s === '') return '';
-  if (window.marked && window.DOMPurify) {
-    return `<div class="md">${DOMPurify.sanitize(marked.parse(String(s), { gfm: true, breaks: true }))}</div>`;
-  }
-  return `<div class="md">${esc(s).replace(/\n/g, '<br>')}</div>`;
+  if (!s) return '';
+  if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(String(s)));
+  return miniMd(String(s));
 }
-
-// ── Question ──────────────────────────────────────────────────────────────
-function renderQuestion(rec) {
-  const q = rec.direct?.context?.question || '–';
-  document.getElementById('question-text').textContent = q;
-}
-
-// ── Ground truth ──────────────────────────────────────────────────────────
-function renderGroundTruth(rec) {
-  const el = document.getElementById('ground-truth-body');
-  const disambiguations = rec.direct?.context?.disambiguations || [];
-  const refs = rec.direct?.context?.references || [];
-
-  if (disambiguations.length === 0 && refs.length === 0) {
-    el.innerHTML = '<em style="color:#888">No disambiguations available</em>';
-    return;
-  }
-
-  if (disambiguations.length > 0) {
-    const seen = new Set();
-    el.innerHTML = disambiguations.map(d => {
-      const key = [...(d.answer || [])].sort().join('|');
-      if (seen.has(key)) return '';
-      seen.add(key);
-      const answers = (d.answer || []).map(a => `<span class="answer-pill">${esc(a)}</span>`).join(' ');
-      return `<div class="disambig-item">
-        <div class="disambig-q">→ ${esc(d.question)}</div>
-        <div class="disambig-a">${answers}</div>
-      </div>`;
-    }).join('');
-  } else {
-    // singleAnswer questions: show refs
-    const seen = new Set();
-    el.innerHTML = refs.map(r => {
-      const key = [...r].sort().join('|');
-      if (seen.has(key)) return '';
-      seen.add(key);
-      const answers = r.map(a => `<span class="answer-pill">${esc(a)}</span>`).join(' ');
-      return `<div class="disambig-item"><div class="disambig-a">${answers}</div></div>`;
-    }).join('');
-  }
-}
-
-// ── Belief state ──────────────────────────────────────────────────────────
-// Colors for claim groups A–Z, plus a fallback for anything else
-const CLAIM_COLORS = {
-  A: { bg: '#dbeafe', fg: '#1d4ed8', border: '#93c5fd' },
-  B: { bg: '#dcfce7', fg: '#15803d', border: '#86efac' },
-  C: { bg: '#fef9c3', fg: '#854d0e', border: '#fde68a' },
-  D: { bg: '#fce7f3', fg: '#9d174d', border: '#f9a8d4' },
-  E: { bg: '#e0e7ff', fg: '#4338ca', border: '#a5b4fc' },
-  F: { bg: '#ffedd5', fg: '#9a3412', border: '#fdba74' },
-  G: { bg: '#ccfbf1', fg: '#0f766e', border: '#5eead4' },
-  H: { bg: '#cffafe', fg: '#155e75', border: '#67e8f9' },
-  I: { bg: '#fae8ff', fg: '#86198f', border: '#f0abfc' },
-  J: { bg: '#ecfccb', fg: '#3f6212', border: '#bef264' },
-  _: { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },
-};
-// Beyond J, generate distinct hues on the fly instead of falling back to gray.
-function claimColor(label) {
-  if (CLAIM_COLORS[label]) return CLAIM_COLORS[label];
-  if (typeof label === 'string' && label.length === 1) {
-    const idx = label.toUpperCase().charCodeAt(0) - 65; // A=0
-    if (idx >= 0 && idx < 26) {
-      const hue = (idx * 137.508) % 360; // golden-angle spread → visually distinct hues
-      return {
-        bg: `hsl(${hue}, 70%, 92%)`,
-        fg: `hsl(${hue}, 70%, 30%)`,
-        border: `hsl(${hue}, 70%, 78%)`,
-      };
+// Small fallback for when the markdown library can't load: paragraphs, headings, lists, bold/italic/code.
+function miniMd(src) {
+  const inline = t => esc(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>');
+  const out = []; let para = [], list = null;
+  const flushP = () => { if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; } };
+  const flushL = () => { if (list) { out.push(`<${list.tag}>` + list.items.map(i => '<li>' + inline(i) + '</li>').join('') + `</${list.tag}>`); list = null; } };
+  for (const line of src.split('\n')) {
+    const t = line.trim();
+    let m;
+    if (!t) { flushP(); flushL(); continue; }
+    if ((m = t.match(/^#{1,6}\s+(.*)$/))) { flushP(); flushL(); out.push('<h4>' + inline(m[1]) + '</h4>'); continue; }
+    if ((m = t.match(/^[-*•]\s+(.*)$/)) || (m = t.match(/^\d+[.)]\s+(.*)$/))) {
+      flushP();
+      const tag = /^\d/.test(t) ? 'ol' : 'ul';
+      if (!list || list.tag !== tag) { flushL(); list = { tag, items: [] }; }
+      list.items.push(m[1]); continue;
     }
+    flushL(); para.push(t);
   }
-  return CLAIM_COLORS['_'];
+  flushP(); flushL();
+  return out.join('');
 }
-
-// Colors for interpretation groups A–E (teal, purple, amber, lime, slate) — old train format
-const INTERP_COLORS = {
-  A: { bg: '#ccfbf1', fg: '#0f766e', border: '#5eead4' },
-  B: { bg: '#f3e8ff', fg: '#7e22ce', border: '#d8b4fe' },
-  C: { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },
-  D: { bg: '#ecfccb', fg: '#3f6212', border: '#bef264' },
-  E: { bg: '#e0f2fe', fg: '#0369a1', border: '#7dd3fc' },
-  _: { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },
-};
-function interpColor(label) { return INTERP_COLORS[label] || INTERP_COLORS['_']; }
-
-// Colors for new format classification labels: yes/no/clarify/refuse
-const INTERP_CLASS_COLORS = {
-  yes:     { bg: '#fef3c7', fg: '#92400e', border: '#fcd34d' },  // amber = contextualised
-  no:      { bg: '#f3f4f6', fg: '#6b7280', border: '#e5e7eb' },  // gray  = uncontextualised
-  clarify: { bg: '#dbeafe', fg: '#1d4ed8', border: '#bfdbfe' },  // blue  = asks CQ
-  refuse:  { bg: '#fee2e2', fg: '#b91c1c', border: '#fecaca' },  // red   = refuses
-};
-function interpClassColor(label) { return INTERP_CLASS_COLORS[label] || INTERP_CLASS_COLORS['no']; }
-
-let beliefVisible = false;
-document.getElementById('belief-toggle').addEventListener('click', () => {
-  beliefVisible = !beliefVisible;
-  document.getElementById('belief-body').style.display = beliefVisible ? '' : 'none';
-  document.getElementById('belief-toggle').textContent = beliefVisible ? 'hide' : 'show';
-});
-
-let finalBeliefVisible = false;
-document.getElementById('final-belief-toggle').addEventListener('click', () => {
-  finalBeliefVisible = !finalBeliefVisible;
-  document.getElementById('final-belief-body').style.display = finalBeliefVisible ? '' : 'none';
-  document.getElementById('final-belief-toggle').textContent = finalBeliefVisible ? 'hide' : 'show';
-});
-
-// Single "claim annotations" toggle controls both sample-background colors
-// and the per-sample C:label badges — they're two views of the same info.
-let claimAnnotationsVisible = false;
-let claimColorVisible = claimAnnotationsVisible;   // aliases kept so the render
-let claimBadgeVisible = claimAnnotationsVisible;   // pipeline stays unchanged
-function applyClaimColors() {
-  document.querySelectorAll('#belief-body .belief-sample[data-claim-bg]').forEach(el => {
-    el.style.background  = claimColorVisible ? el.dataset.claimBg     : '';
-    el.style.borderColor = claimColorVisible ? el.dataset.claimBorder  : '';
-  });
+function formatRaw(raw) {
+  return esc(raw).replace(/^(\s*)(CLUSTERS|INTERPRETATIONS|STRATEGY|REASONING|FINAL RESPONSE|RESPONSE)(:)/gm, '$1<b>$2$3</b>');
 }
-function applyClaimBadges() {
-  document.querySelectorAll('#belief-body .claim-badge').forEach(el => {
-    el.style.display = claimBadgeVisible ? '' : 'none';
-  });
-}
-document.getElementById('claim-annotations-toggle').addEventListener('click', () => {
-  claimAnnotationsVisible = !claimAnnotationsVisible;
-  claimColorVisible = claimAnnotationsVisible;
-  claimBadgeVisible = claimAnnotationsVisible;
-  document.getElementById('claim-annotations-toggle').textContent =
-    claimAnnotationsVisible ? '⚖️ claim annotations: on' : '⚖️ claim annotations: off';
-  applyClaimColors();
-  applyClaimBadges();
-});
-
-// Interps / 1-intent / any-intent buttons are hidden from the public demo
-// (see comment in the belief-state card header). State variables are kept so
-// the render helpers still work; defaults are "off" so nothing shows.
-let interpBadgeVisible = false;
-function applyInterpBadges() {
-  document.querySelectorAll('#belief-body .interp-badge-el').forEach(el => {
-    el.style.display = interpBadgeVisible ? '' : 'none';
-  });
-}
-
-let judge1Visible = false;
-function applyJudge1() {
-  document.querySelectorAll('#belief-body .judge-1intent').forEach(el => {
-    el.style.display = judge1Visible ? '' : 'none';
-  });
-}
-
-let judgeAnyVisible = false;
-function applyJudgeAny() {
-  document.querySelectorAll('#belief-body .judge-anyintent').forEach(el => {
-    el.style.display = judgeAnyVisible ? '' : 'none';
-  });
-}
-
-function miniVerdictBadge(v, label, extraClass) {
-  if (!v) return '';
-  const isPass = v.verdict === 1, isFail = v.verdict === 0;
-  const bg = isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#f3f4f6';
-  const fg = isPass ? '#15803d' : isFail ? '#b91c1c' : '#6b7280';
-  const border = isPass ? '#bbf7d0' : isFail ? '#fecaca' : '#e5e7eb';
-  const icon = isPass ? '✓' : isFail ? '✗' : '–';
-  return `<span class="group-badge ${extraClass}" style="background:${bg};color:${fg};border-color:${border}">${icon} ${esc(label)}</span>`;
-}
-
-function renderBeliefState(rec) {
-  const el = document.getElementById('belief-body');
-  // belief_state is 0-indexed; sample_indices in variation files are 1-based
-  const samples = rec.direct?.generations?.belief_state || [];
-  const cv = rec.claimVar?.generations?.claim_variation || null;
-  const iv = rec.interpVar?.generations?.interpretation_variation || null;
-
-  // Per-sample judge data (0-indexed, aligned with belief_state)
-  const jb1Samples  = rec.jBelief?.generations?.belief?.samples || [];
-  const jbAnySamples = rec.jBelief?.generations?.belief_anyref?.samples
-                    || rec.jBelief?.generations?.belief?.samples || [];
-
-  // Update header counts (visible even when body is collapsed)
-  const countsEl = document.getElementById('belief-counts');
-  if (countsEl) {
-    const parts = [];
-    if (cv != null) parts.push(`Claims: ${cv.n_distinct_claims}`);
-    // Interps counts hidden from the public demo — kept in `iv` for internal use.
-    countsEl.textContent = parts.join('  |  ');
+const chipFor = (st, label) => st ? `<span class="chip s-${st}">${esc(label || ({ answer: 'Direct answer', clarify: 'Clarification question', abstain: 'Abstain' })[st])}</span>` : '';
+function verdictBlock(j, ref, anyj) {
+  if (!j && !anyj) return '';
+  const parts = [];
+  if (j) {
+    parts.push(`<span class="pill ${vClass(j.verdict)}" title="LLM judge (${esc(JUDGE_MODEL)}) against the intended reference">⚖️ ${vMark(j.verdict)} ${vWord(j.verdict)}</span>`);
+    if (ref) parts.push(`<span class="subtle">intended</span><span class="ref">${esc(ref)}</span>`);
   }
-
-  if (samples.length === 0) {
-    el.innerHTML = '<em style="color:#888">No belief state samples</em>';
-  } else {
-    // Build lookup: 1-based sample index → claim info
-    // sample_indices in the variation files are 1-based; belief_state array is 0-based
-    const claimByIdx = {};  // sampleIdx (1-based) → { label, type }
-    if (cv?.claims) {
-      for (const claim of cv.claims) {
-        for (const idx of claim.sample_indices) {
-          claimByIdx[idx] = { label: claim.label, type: claim.type };
-        }
-      }
-    }
-
-    // Build lookup: 1-based sample index → interp info
-    // Handles two formats:
-    //   New (dev): classifications: [{index, label: yes/no/clarify/refuse, scope}]
-    //   Old (train): interpretations: [{label: A/B/C, sample_indices, representative, contextualized}]
-    const interpByIdx = {};
-    if (iv?.classifications) {
-      for (const cls of iv.classifications) {
-        interpByIdx[cls.index] = { format: 'new', label: cls.label, scope: cls.scope || '' };
-      }
-    } else if (iv?.interpretations) {
-      for (const interp of iv.interpretations) {
-        const noInterp = /no interpretation/i.test(interp.representative || '');
-        for (const idx of interp.sample_indices) {
-          interpByIdx[idx] = { format: 'old', label: interp.label, contextualized: interp.contextualized, noInterp };
-        }
-      }
-    }
-
-    // Legend
-    let legendHtml = '';
-    if (cv || iv) {
-      legendHtml = '<div class="belief-legend">';
-      if (cv?.claims) {
-        const chips = cv.claims.map(c => {
-          const col = claimColor(c.label);
-          return `<span class="legend-chip" style="background:${col.bg};color:${col.fg};border-color:${col.border}">${esc(c.label)}: ${esc(c.representative)} (n=${c.n_samples})</span>`;
-        }).join('');
-        legendHtml += `<div class="legend-section"><span class="legend-title" title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims.">⚖️ claims</span>${chips}</div>`;
-      }
-      // Interps legend hidden from the public demo — kept in `iv` for internal use.
-      legendHtml += '</div>';
-    }
-
-    // Grid: one cell per belief sample (array index i → sample number i+1)
-    const gridHtml = samples.map((s, i) => {
-      const sampleIdx = i + 1;  // convert 0-based array index to 1-based sample number
-      const text = s.raw_response || s.response || '';
-      const claim = claimByIdx[sampleIdx];
-      const interp = interpByIdx[sampleIdx];
-
-      const col = claim ? claimColor(claim.label) : null;
-      const claimDataAttrs = col ? `data-claim-bg="${col.bg}" data-claim-border="${col.border}"` : '';
-
-      let badges = '';
-      if (claim) {
-        badges += `<span class="group-badge claim-badge" style="background:${col.bg};color:${col.fg};border-color:${col.border}">C:${esc(claim.label)}</span>`;
-      }
-      if (interp) {
-        let icol, badgeText;
-        if (interp.format === 'new') {
-          icol = interpClassColor(interp.label);
-          const scopeText = interp.scope ? ` — ${interp.scope}` : '';
-          badgeText = `I:${esc(interp.label)}${esc(scopeText)}`;
-        } else {
-          icol = interp.noInterp ? { bg: '#fee2e2', fg: '#b91c1c', border: '#fecaca' } : interpColor(interp.label);
-          badgeText = `I:${esc(interp.label)}`;
-        }
-        badges += `<span class="group-badge interp-badge-el" style="background:${icol.bg};color:${icol.fg};border-color:${icol.border}">${badgeText}</span>`;
-      }
-      badges += miniVerdictBadge(jb1Samples[i],  '1-int', 'judge-1intent');
-      badges += miniVerdictBadge(jbAnySamples[i], 'any',   'judge-anyintent');
-
-      return `<div class="belief-sample" ${claimDataAttrs}>
-        <div class="belief-sample-header">
-          <span class="belief-num">${sampleIdx}.</span>${badges}
-        </div>
-        <div class="belief-sample-text">${md(text)}</div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = legendHtml + `<div class="belief-grid">${gridHtml}</div>`;
-    applyClaimColors();
-    applyClaimBadges();
-    applyInterpBadges();
-    applyJudge1();
-    applyJudgeAny();
-  }
-
-  // Respect persistent visibility state (don't reset on navigation)
-  el.style.display = beliefVisible ? '' : 'none';
-  document.getElementById('belief-toggle').textContent = beliefVisible ? 'hide' : 'show';
+  if (anyj) parts.push(`<span class="subtle">· any interpretation</span><span class="vmini ${vClass(anyj.verdict)}">${vMark(anyj.verdict)}</span>`);
+  return `<span class="verdict-line">${parts.join('')}</span>`;
+}
+function judgeWhy(j, anyj) {
+  const r = [];
+  if (j?.reasoning) r.push(`<p><span class="tag">Intended answer</span> ${esc(j.reasoning)}</p>`);
+  if (anyj?.reasoning) r.push(`<p><span class="tag">Any interpretation</span> ${esc(anyj.reasoning)}</p>`);
+  return r.join('');
+}
+// A row with an optional verdict and toggle buttons; each button opens its own panel below.
+let xSeq = 0;
+function foot(verdictHtml, items) {
+  items = (items || []).filter(i => i && i.html);
+  if (!verdictHtml && !items.length) return '';
+  const id = 'x' + (++xSeq);
+  const btns = items.map((it, i) => `<button class="xbtn" data-xt="${id}-${i}" aria-expanded="false" aria-controls="${id}-${i}">${it.label}</button>`).join('');
+  const panels = items.map((it, i) => `<div class="xpanel" id="${id}-${i}" hidden>${it.html}</div>`).join('');
+  return `<div class="foot">${verdictHtml || ''}${btns}</div>${panels}`;
 }
 
-// ── Turn 4 intermediate belief state (BAG+) ─────────────────────────────────
-// Only populated when final_prompt='belief': generate_final_answer.py resamples
-// K new candidates conditioned on the conversation and stores them as a flat
-// array of raw strings at the top level (rec.final.belief_state), unlike the
-// turn-1 belief state (array of {response, raw_response} dicts). Per-sample
-// judge verdicts aren't computed for this step, only claim clustering.
-function renderFinalBeliefState(rec) {
-  const el = document.getElementById('final-belief-body');
-  const samples = rec.final?.belief_state || null;
-
-  if (!samples || samples.length === 0) {
-    el.innerHTML = '<em style="color:#888">No turn-4 output — only populated when Turn 4 method = BAG+ and this record was clarified.</em>';
-  } else {
-    // Turn-4 augmentation output: the reasoner's answer/abstain decision over the belief state below.
-    // Rendered the same way as the turn-1 Augmentation output card (badge + parsed-block).
-    const gen = rec.final?.generations || {};
-    const strategy = gen.strategy || '';
-    let badgeClass = 'badge-direct', badgeLabel = 'direct answer';
-    if (strategy.includes('abstain')) { badgeClass = 'badge-abstain'; badgeLabel = 'abstain'; }
-    const jf = rec.jFinal?.generations?.final;
-    const judgeHtml = jf ? judgeBlock(jf, rec.jFinal?.context?.final_ref || null) : '';
-
-    let outputHtml = `<span class="strategy-badge ${badgeClass}">${esc(badgeLabel)}</span>`;
-    const parsedBits = [];
-    if (strategy)      parsedBits.push(`<div class="reasoning-text"><strong>Strategy:</strong> ${esc(strategy)}</div>`);
-    if (gen.reasoning) parsedBits.push(`<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(gen.reasoning)}</div>`);
-    if (gen.response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${md(gen.response)}</div>`);
-    if (parsedBits.length) outputHtml += `<div class="parsed-block" style="margin-top:10px;">${parsedBits.join('')}</div>`;
-    outputHtml += judgeHtml;
-    outputHtml += `<div class="separator"></div>`;
-    outputHtml += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#666;margin-bottom:6px;">🤖 resampled belief state (K=${samples.length})</div>`;
-
-    const cv = rec.cvFinal?.generations?.claim_variation || null;
-
-    // Build lookup: 1-based sample index → claim info (same convention as turn-1)
-    const claimByIdx = {};
-    if (cv?.claims) {
-      for (const claim of cv.claims) {
-        for (const idx of claim.sample_indices) claimByIdx[idx] = { label: claim.label };
-      }
-    }
-
-    let legendHtml = '';
-    if (cv?.claims) {
-      const chips = cv.claims.map(c => {
-        const col = claimColor(c.label);
-        return `<span class="legend-chip" style="background:${col.bg};color:${col.fg};border-color:${col.border}">${esc(c.label)}: ${esc(c.representative)} (n=${c.n_samples})</span>`;
-      }).join('');
-      legendHtml = `<div class="belief-legend"><div class="legend-section"><span class="legend-title" title="Belief samples clustered post-hoc by an LLM judge (gemini-2.5-flash) into groups of semantically equivalent claims.">⚖️ claims</span>${chips}</div></div>`;
-    }
-
-    const gridHtml = samples.map((text, i) => {
-      const sampleIdx = i + 1;  // convert 0-based array index to 1-based sample number
-      const claim = claimByIdx[sampleIdx];
-      let badge = '';
-      if (claim) {
-        const col = claimColor(claim.label);
-        badge = `<span class="group-badge" style="background:${col.bg};color:${col.fg};border-color:${col.border}">C:${esc(claim.label)}</span>`;
-      }
-      return `<div class="belief-sample">
-        <div class="belief-sample-header">
-          <span class="belief-num">${sampleIdx}.</span>${badge}
-        </div>
-        <div class="belief-sample-text">${md(text)}</div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = outputHtml + legendHtml + `<div class="belief-grid">${gridHtml}</div>`;
-  }
-
-  // Respect persistent visibility state (don't reset on navigation)
-  el.style.display = finalBeliefVisible ? '' : 'none';
-  document.getElementById('final-belief-toggle').textContent = finalBeliefVisible ? 'hide' : 'show';
-}
-
-// ── Strategy ──────────────────────────────────────────────────────────────
-function renderStrategy(rec) {
-  const el = document.getElementById('strategy-body');
-  const badgeEl = document.getElementById('strategy-badge');
-  const clarify = rec.clarify;
-
-  if (!clarify) {
-    badgeEl.innerHTML = '';
-    el.innerHTML = '<em style="color:#888">No clarify step output</em>';
-    return;
-  }
-
-  const strategy = clarify.generations?.strategy || '';
-  const reasoning = clarify.generations?.reasoning || '';
-  const response = clarify.generations?.response || '';
-  const rawResponse = clarify.generations?.raw_response || '';
-
-  // Badge
-  let badgeClass = 'badge-clarify', badgeLabel = strategy;
-  if (strategy.includes('direct')) { badgeClass = 'badge-direct'; badgeLabel = 'direct answer'; }
-  else if (strategy.includes('abstain')) { badgeClass = 'badge-abstain'; badgeLabel = 'abstain'; }
-  else if (strategy.includes('clarification')) { badgeLabel = 'clarification question'; }
-  badgeEl.innerHTML = `<span class="strategy-badge ${badgeClass}">${esc(badgeLabel)}</span>`;
-
-  let html = '';
-
-  const parsedBits = [];
-  if (strategy)  parsedBits.push(`<div class="reasoning-text"><strong>Strategy:</strong> ${esc(strategy)}</div>`);
-  if (reasoning) parsedBits.push(`<div class="reasoning-text"><strong>Reasoning:</strong> ${esc(reasoning)}</div>`);
-  if (response)  parsedBits.push(`<div class="reasoning-text"><strong>Response:</strong> ${md(response)}</div>`);
-  if (parsedBits.length) {
-    html += `<div class="parsed-block">${parsedBits.join('')}</div>`;
-  }
-
-  if (rawResponse) {
-    const display = rawVisible ? '' : 'none';
-    html += `<div id="raw-output-wrap" style="display:${display}">`;
-    html += `<div class="separator"></div>`;
-    html += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#666;margin-bottom:6px;">Raw output</div>`;
-    html += `<div class="raw-response-block">${formatRawResponse(rawResponse)}</div>`;
-    html += `</div>`;
-  }
-
-  el.innerHTML = html;
-}
-
-// Persistent visibility state for the raw BAG output block (mirrors beliefVisible).
-let rawVisible = false;
-document.getElementById('raw-output-toggle').addEventListener('click', () => {
-  rawVisible = !rawVisible;
-  const wrap = document.getElementById('raw-output-wrap');
-  if (wrap) wrap.style.display = rawVisible ? '' : 'none';
-  document.getElementById('raw-output-toggle').textContent = rawVisible ? 'hide raw' : 'show raw';
-});
-
-// Parse raw_response and highlight CLUSTERS / INTERPRETATIONS / STRATEGY / REASONING sections
-function formatRawResponse(raw) {
-  // Split into lines and apply color coding
-  return raw.split('\n').map(line => {
-    const e = esc(line);
-    if (/^CLUSTERS?:/i.test(line) || /^INTERPRETATIONS?:/i.test(line) || /^STRATEGY:/i.test(line) || /^REASONING:/i.test(line)) {
-      return `<span class="raw-section-label">${e}</span>`;
-    }
-    if (/^\s*[A-Z]\s*[\(\{]/.test(line)) {
-      return `<span class="cluster-line">${e}</span>`;
-    }
-    if (/^\s*[A-Z]\s*→/.test(line) || /^\s*[A-Z]\s*->/.test(line)) {
-      return `<span class="interp-line">${e}</span>`;
-    }
-    return e;
-  }).join('\n');
-}
-
-// ── Conversation ──────────────────────────────────────────────────────────
-function renderConversation(rec) {
-  const el = document.getElementById('conv-body');
-  const clarify = rec.clarify;
-  const user = rec.user;
-  const final = rec.final;
-  const jFinal = rec.jFinal;
-
-  let html = '';
-
-  const strategy = clarify?.generations?.strategy || '';
-  const originalQuestion = clarify?.context?.question || rec.direct?.context?.question || '';
-
-  // Every branch starts with the original ambiguous user question.
-  if (originalQuestion) {
-    html += convTurn('user', '👤', 'User question', null, originalQuestion);
-  }
-
-  if (strategy.includes('clarification')) {
-    // Step 1: Clarification question
-    const cq = clarify?.generations?.response || '';
-    html += convTurn('assistant', '🤖', 'Clarification question', null, cq);
-
-    // Step 2: User answer
-    const uReasoning = user?.generations?.reasoning || null;
-    const uResponse  = user?.generations?.response  || '';
-    html += convTurn('user', '👤', 'User response', uReasoning, uResponse);
-
-    // Step 3: Final answer — prompt returns list of strings; prompt1/belief returns parsed dict
-    let finalText = '', finalReasoning = null, finalBadge = '';
-    const finalGen = final?.generations;
-    if (Array.isArray(finalGen)) {
-      finalText = finalGen[0] || '';
-    } else if (finalGen && typeof finalGen === 'object') {
-      finalText = finalGen.response || '';
-      finalReasoning = finalGen.reasoning || null;
-      const st = finalGen.strategy || '';
-      if (st.includes('abstain')) {
-        finalBadge = `<span class="strategy-badge badge-abstain">abstain</span>`;
-      } else if (st) {
-        finalBadge = `<span class="strategy-badge badge-direct">direct answer</span>`;
-      }
-    }
-    const jf = jFinal?.generations?.final;
-    const judgeHtml = jf ? judgeBlock(jf, jFinal?.context?.final_ref || null) : '';
-    html += convTurn('assistant', '🤖', 'Final answer', finalReasoning, finalText, judgeHtml, finalBadge);
-
-  } else if (strategy.includes('direct')) {
-    // Direct answer from clarify step (no conversation)
-    const response = clarify?.generations?.response || '';
-    const jc = rec.jClarify?.generations?.reason_direct;
-    const judgeHtml = jc ? judgeBlock(jc, rec.jClarify?.context?.direct_ref || null) : '';
-    html += convTurn('assistant', '🤖', 'Direct answer', null, response, judgeHtml);
-
-  } else if (strategy.includes('abstain')) {
-    const response = clarify?.generations?.response || '';
-    html += convTurn('assistant', '🤖', 'Abstain', null, response);
-
-  } else {
-    html = '<em style="color:#888">No conversation data</em>';
-  }
-
-  el.innerHTML = html;
-}
-
-function convTurn(role, icon, label, reasoning, text, extra = '', badge = '') {
-  const reasoningHtml = reasoning
-    ? `<div class="conv-reasoning">Internal reasoning: ${esc(reasoning)}</div>`
-    : '';
-  return `
-    <div class="conv-turn">
-      <div class="conv-icon icon-${role}">${icon}</div>
-      <div class="conv-content">
-        <div class="conv-role">${esc(label)} ${badge}</div>
-        ${reasoningHtml}
-        <div class="conv-text">${md(text)}</div>
-        ${extra}
-      </div>
+// Belief state block (used for turn 1 and, with BAG+, turn 4)
+let bbSeq = 0;
+function beliefBlock(texts, claims, verdicts, { open = false, caption = '', overlay = false, bid = null } = {}) {
+  const k = texts.length;
+  if (!k) return '<p class="subtle">No belief-state samples for this record.</p>';
+  const id = bid || ('bb' + (++bbSeq));
+  if (!overlay) {
+    const plain = texts.map((t, i) => `<div class="sample plain"><div class="sample-n">${i + 1}</div><div class="sample-body read">${md(t)}</div></div>`).join('');
+    return `<div class="bb" id="${id}">
+      <div class="bb-foot"><button class="textbtn bb-toggle" aria-expanded="${open}">${open ? 'Hide' : 'Show'} ${k} samples</button>${caption ? `<span>${caption}</span>` : ''}</div>
+      <div class="samples grid" ${open ? '' : 'hidden'}>${plain}</div>
     </div>`;
+  }
+  const cl = clusterOrder(claims, k);
+  const colorOf = [], cIdx = [];
+  cl.forEach((c, ci) => c.idx.forEach(i => { colorOf[i] = c.color; cIdx[i] = ci; }));
+  const order = cl.flatMap(c => c.idx);
+
+  const segs = order.map(i => `<button class="seg-s" data-c="${cIdx[i]}" style="background:${colorOf[i]}" title="Sample ${i + 1}: ${esc(cl[cIdx[i]].rep)}" aria-label="Sample ${i + 1}"></button>`).join('');
+  const ticks = verdicts ? `<div class="ticks" aria-hidden="true">${order.map(i => `<span class="${vClass(verdicts[i])}">${verdicts[i] == null ? '' : vMark(verdicts[i])}</span>`).join('')}</div>` : '';
+  const typeNote = { clarify: ' <em>(asks to clarify)</em>', refuse: ' <em>(refuses)</em>' };
+  const legend = claims
+    ? `<ul class="legend">${cl.map((c, ci) => `<li><button class="lg" data-c="${ci}"><span class="sw" style="background:${c.color}"></span><span class="lg-t">${esc(c.rep)}${typeNote[c.type] || ''}</span><span class="lg-n">${c.idx.length}/${k}</span></button></li>`).join('')}</ul>`
+    : '<p class="subtle">No claim clustering available for these samples.</p>';
+  const samples = order.map(i => `
+    <div class="sample" data-c="${cIdx[i]}">
+      <div class="sample-n">${i + 1}<span class="sw" style="background:${colorOf[i]}"></span>${verdicts && verdicts[i] != null ? `<span class="${vClass(verdicts[i])}">${vMark(verdicts[i])}</span>` : ''}</div>
+      <div class="sample-body read">${md(texts[i])}</div>
+    </div>`).join('');
+
+  return `<div class="bb" id="${id}">
+    <div><div class="bar">${segs}</div>${ticks}</div>
+    ${legend}
+    <div class="bb-foot">
+      <button class="textbtn bb-toggle" aria-expanded="${open}">${open ? 'Hide' : 'Show'} ${k} samples</button>
+      ${caption ? `<span>${caption}</span>` : ''}
+    </div>
+    <div class="samples" ${open ? '' : 'hidden'}>${samples}</div>
+  </div>`;
+}
+function bbSetActive(bb, c) {
+  const cur = bb.dataset.active;
+  const next = (cur === c) ? null : c;
+  if (next == null) delete bb.dataset.active; else bb.dataset.active = next;
+  bb.querySelector('.bar').classList.toggle('has-active', next != null);
+  bb.querySelectorAll('.seg-s').forEach(s => s.classList.toggle('on', s.dataset.c === next));
+  bb.querySelectorAll('.lg').forEach(s => s.classList.toggle('on', s.dataset.c === next));
+  bb.querySelectorAll('.sample').forEach(s => { s.hidden = next != null && s.dataset.c !== next; });
+  if (next != null) bbOpen(bb, true);
+}
+function bbOpen(bb, open) {
+  const list = bb.querySelector('.samples'), btn = bb.querySelector('.bb-toggle');
+  list.hidden = !open;
+  btn.setAttribute('aria-expanded', open);
+  btn.textContent = `${open ? 'Hide' : 'Show'} ${bb.querySelectorAll('.sample').length} samples`;
 }
 
-function judgeBlock(j, ref) {
-  if (!j) return '';
-  const verdict = j.verdict;
-  const reason  = j.reasoning || '';
-  const badgeHtml = verdict === 1
-    ? `<span class="verdict-pass" title="Source: LLM judge">⚖️ ✓ pass</span>`
-    : verdict === 0
-      ? `<span class="verdict-fail" title="Source: LLM judge">⚖️ ✗ fail</span>`
-      : `<span class="verdict-null" title="Source: LLM judge">⚖️ – no judge</span>`;
-  const refHtml = ref != null
-    ? `<span class="judge-ref" title="${esc(ref)}">${ref === 'any' ? 'any ref' : esc(ref)}</span>`
-    : '';
-  const reasonHtml = reason ? `<span class="judge-reason">Judge: ${esc(reason)}</span>` : '';
-  return `<div class="judge-row">${badgeHtml}${refHtml}${reasonHtml}</div>`;
+function msg({ role, avatar, name, turnN, chip = '', body, under = '', footer = '' }) {
+  return `<div class="msg ${role}">
+    <div class="avatar" aria-hidden="true">${avatar}</div>
+    <div class="msg-main">
+      <div class="msg-meta"><span class="who">${esc(name)}</span>${chip}<span class="turn-n">turn ${turnN}</span></div>
+      <div class="bubble read">${md(body) || '<span class="subtle">(empty)</span>'}</div>
+      ${under}${footer}
+    </div>
+  </div>`;
 }
 
-// ── Baselines ─────────────────────────────────────────────────────────────
-function renderBaselines(rec) {
-  const el = document.getElementById('baselines-body');
-  let html = '';
+// ─────────────────────────────────────────────────────────────────────────────
+// Record view
+// ─────────────────────────────────────────────────────────────────────────────
+function renderRecord() {
+  const id = S.cur;
+  const d = directRec(id);
+  if (!d) return;
+  bbSeq = 0; xSeq = 0;
+  const pos = S.filtered.indexOf(id);
+  const total = S.filtered.length;
+  const posText = pos >= 0 ? `${(pos + 1).toLocaleString('en')} <span>of ${total.toLocaleString('en')}</span>` : `not in filtered list`;
 
-  // Direct answer (sampled) — judge evals `answer` field
-  const directSampled = rec.direct?.generations?.answer?.[0]?.raw_response || '';
-  const jd    = rec.jDirect?.generations?.direct;
-  const jdAny = rec.jDirect?.generations?.direct_anyref;
-  if (directSampled) {
-    html += `<div class="baseline-label">🤖 Direct generation</div>`;
-    html += `<div class="baseline-text">${md(directSampled)}</div>`;
-    if (jd)    html += judgeBlock(jd,    rec.jDirect?.context?.direct_ref || null);
-    if (jdAny) html += judgeBlock(jdAny, 'any');
+  $('col').innerHTML = `
+    <div>
+      <div class="rec-nav">
+        <button class="navbtn" id="prev" aria-label="Previous record" ${pos <= 0 ? 'disabled' : ''}>←</button>
+        <span class="pos">${posText}</span>
+        <button class="navbtn" id="next" aria-label="Next record" ${pos < 0 || pos >= total - 1 ? 'disabled' : ''}>→</button>
+        <span class="spacer"></span>
+        <span class="mono">id ${esc(id)}</span>
+        ${EMBED ? '' : '<button class="textbtn" id="copy-link">Copy link</button>'}
+      </div>
+      <h1 class="question">${esc(d.context?.question || '')}</h1>
+      <div class="intent" id="intent">${intentHtml(id)}</div>
+    </div>
+    <section class="panel">
+      <div class="sec-head">
+        <h2>What each method did</h2>
+        <div class="seg" role="group" aria-label="Turn 4 method"><span>Turn 4</span>
+          <button data-t4="plus" aria-pressed="${S.t4 === 'plus'}">SAG+ / BAG+</button>
+          <button data-t4="baseline" aria-pressed="${S.t4 === 'baseline'}">forced answer</button>
+        </div>
+      </div>
+      <div class="cmp" id="cmp"></div>
+      <p class="hint">Select a method to inspect it below. ✓/✗ is the LLM judge's verdict on the final answer against the simulated user's intended reference.<span id="load-all-wrap"></span></p>
+    </section>
+    <section class="panel" id="belief"></section>
+    <section class="panel" id="conversation"></section>
+    <section class="panel" id="baselines"></section>`;
+  renderCompare();
+  renderBelief(id);
+  renderConversation(id);
+  renderBaselines(id);
+  updateUrl();
+}
+
+function intentHtml(id) {
+  const d = directRec(id);
+  const dis = d.context?.disambiguations || [];
+  const disamb = D.base.disamb.map.get(id)?.context;
+  if (!dis.length) {
+    const refs = [...new Set((d.context?.references || []).flat())];
+    return `<div class="intent-line"><span class="tag">Unambiguous in AmbigQA</span><span class="subtle">reference</span>${refs.map(r => `<span class="ref">${esc(r)}</span>`).join(' ')}</div>`;
+  }
+  const target = disamb?.disambiguated_question || null;
+  const tref = (disamb?.reference || []).join(' / ');
+  let h = '';
+  if (target) {
+    h += `<div class="intent-line"><span class="tag">Simulated user means</span><span class="dq">“${esc(target)}”</span><span class="ref">${esc(tref)}</span></div>`;
+  }
+  h += `<details class="interps"><summary>All ${dis.length} AmbigQA interpretations</summary><ul class="interp-list">${dis.map(x =>
+    `<li class="${x.question === target ? 'is-target' : ''}"><span class="dq">${esc(x.question)}</span>${(x.answer || []).map(a => `<span class="ref">${esc(a)}</span>`).join(' ')}</li>`).join('')}</ul></details>`;
+  return h;
+}
+
+function renderCompare() {
+  const el = $('cmp');
+  if (!el || !S.cur) return;
+  const wrap = $('load-all-wrap');
+  if (wrap) wrap.innerHTML = METHODS.some(m => !D.meth[methKey(m)])
+    ? ` <button class="textbtn" id="load-all">Load all methods</button> <span class="subtle">(downloads each method's files from Hugging Face)</span>` : '';
+  const id = S.cur;
+  const jd = D.base.jDirect.map.get(id)?.generations?.direct;
+  let h = `<button class="cell is-base" data-jump="baselines">
+      <span class="cell-name">Direct <small>no method</small></span>
+      <span class="cell-strat s-answer">answer</span>
+      <span class="cell-v ${vClass(jd?.verdict)}">${jd ? vMark(jd.verdict) + ' ' + vWord(jd.verdict) : '–'}</span>
+    </button>`;
+  for (const m of METHODS) {
+    const o = outcome(m, id);
+    const showV = o.strategy && !(o.strategy === 'abstain' || o.finalStrategy === 'abstain');
+    h += `<button class="cell${m === S.method ? ' is-current' : ''}" data-method="${m}" aria-pressed="${m === S.method}">
+      <span class="cell-name">${METHOD_LABEL[m]}${o.strategy === 'clarify' ? ` <small>${t4Label(m, S.t4)}</small>` : ''}</span>
+      <span class="cell-strat s-${o.strategy || 'answer'}">${strategyText(o)}</span>
+      <span class="cell-v ${vClass(showV ? o.verdict : null)}">${showV ? vMark(o.verdict) + ' ' + vWord(o.verdict) : ((o.loading || o.notLoaded) ? '' : 'not judged')}</span>
+    </button>`;
+  }
+  if (isAmb(id)) {
+    const jo = D.base.jDisamb.map.get(id)?.generations?.disambig;
+    h += `<button class="cell is-base" data-jump="baselines">
+      <span class="cell-name">Oracle <small>given intent</small></span>
+      <span class="cell-strat s-answer">answer</span>
+      <span class="cell-v ${vClass(jo?.verdict)}">${jo ? vMark(jo.verdict) + ' ' + vWord(jo.verdict) : '–'}</span>
+    </button>`;
+  }
+  el.innerHTML = h;
+}
+
+function overlaySwitch() {
+  return `<button class="switch" data-overlay aria-pressed="${S.judgeOverlay}" title="Show the judge model's post-hoc claim clusters and per-sample verdicts"><span class="knob"></span>Judge clusters <small>faithfulness eval</small></button>`;
+}
+function renderBelief(id) {
+  const d = directRec(id);
+  const texts = (d.generations?.belief_state || []).map(s => s.raw_response || s.response || '');
+  const cv = claimsOf(id);
+  const jb = D.base.jBelief.map.get(id)?.generations;
+  const verdicts = (jb?.belief_anyref?.samples || jb?.belief?.samples || []).map(s => s?.verdict ?? null);
+  const n = cv?.n_distinct_claims;
+  const ov = S.judgeOverlay;
+  $('belief').innerHTML = `
+    <div class="sec-head"><h2>Belief state</h2>
+      <span class="sub">${texts.length} sampled answers · ${esc(S.model)}</span>
+      ${overlaySwitch()}</div>
+    ${ov ? `<p class="eval-note">Evaluation overlay. The judge model (${esc(JUDGE_MODEL)}) clustered these samples after the fact for the faithfulness analysis${n != null ? ` and found ${n} distinct claim${n === 1 ? '' : 's'}` : ''}${verdicts.length ? '; ✓/✗ marks samples it judged correct under any AmbigQA interpretation' : ''}. None of this is shown to BAG.</p>` : ''}
+    ${beliefBlock(texts, ov ? (cv?.claims || null) : null, ov && verdicts.length ? verdicts : null, {
+      open: S.samplesOpen, overlay: ov, bid: 'bb-main',
+      caption: ov ? 'Click a claim to see its samples.' : 'The K samples as generated. BAG1–3 receive these; SAG does not.',
+    })}`;
+}
+
+function renderConversation(id) {
+  const md_ = M(S.method);
+  const label = METHOD_LABEL[S.method];
+  const t4name = t4Label(S.method, S.t4);
+  const el = $('conversation');
+  const o = outcome(S.method, id);
+  const head = `<div class="sec-head"><h2>Conversation</h2><span class="sub">${label}${o.strategy === 'clarify' ? ` · turn 4: ${t4name === 'baseline' ? 'forced answer' : t4name}` : ''} · simulated user ${esc(USER_MODEL)}</span></div>`;
+  if (!md_) { el.innerHTML = head + '<p class="subtle">Loading…</p>'; return; }
+  const q = directRec(id)?.context?.question || '';
+  const c = md_.clarify.map.get(id)?.generations;
+  const st = norm(c?.strategy);
+  let h = msg({ role: 'user', avatar: '👤', name: 'User', turnN: 1, body: q });
+  if (!st) {
+    el.innerHTML = head + `<div class="conv">${h}<p class="subtle">${label} has no output for this record.</p></div>`;
+    return;
   }
 
-  // Belief state any-ref coverage
-  // For non-ambiguous questions belief_anyref is null (only 1 ref), fall back to belief
-  // const jbAny = rec.jBelief?.generations?.belief_anyref ?? rec.jBelief?.generations?.belief;
-  // if (jbAny) {
-  //   html += `<div class="separator"></div>`;
-  //   html += `<div class="baseline-label">🤖 Belief state any-ref coverage</div>`;
-  //   html += judgeBlock(jbAny, 'any');
-  //
-  //   // Show a passing sample's generation + judge reasoning (if any)
-  //   const beliefSamples = rec.direct?.generations?.belief_state || [];
-  //   const jbSamples = jbAny.samples || [];
-  //   const passingIdx = jbSamples.findIndex(s => s.verdict === 1);
-  //   if (passingIdx !== -1 && beliefSamples[passingIdx]) {
-  //     const gen = beliefSamples[passingIdx].raw_response || beliefSamples[passingIdx].response || '';
-  //     const reasoning = jbSamples[passingIdx].reasoning || '';
-  //     html += `<div style="margin-top:8px;font-size:11px;font-weight:600;color:#888;text-transform:uppercase;margin-bottom:4px;">Passing generation (sample ${passingIdx + 1})</div>`;
-  //     html += `<div class="baseline-text" style="font-size:12px;">${esc(gen)}</div>`;
-  //     if (reasoning) {
-  //       html += `<div class="conv-reasoning" style="margin-top:4px;">Judge: ${esc(reasoning)}</div>`;
-  //     }
-  //   }
-  // }
-
-  // Disambiguated
-  const disamb = rec.disamb;
-  if (disamb) {
-    const dq     = disamb.context?.disambiguated_question || '';
-    const ref    = (disamb.context?.reference || []).join(', ');
-    const ans    = disamb.generations?.answer?.[0] || '';
-    const jdb    = rec.jDisamb?.generations?.disambig;
-    const jdbAny = rec.jDisamb?.generations?.disambig_anyref;
-    html += `<div class="separator"></div>`;
-    html += `<div class="baseline-label">🤖 Direct generation based on oracle disambiguated question</div>`;
-    if (dq) html += `<div style="font-size:13px;color:#444;margin-bottom:6px;">📚 <strong>AmbigQA disambiguated question:</strong> "${esc(dq)}" <span style="color:#888;font-size:12px;">(ref: ${esc(ref)})</span></div>`;
-    html += `<div class="baseline-text">${md(ans)}</div>`;
-    if (jdb)    html += judgeBlock(jdb,    rec.jDisamb?.context?.disambig_ref || null);
-    if (jdbAny) html += judgeBlock(jdbAny, 'any');
+  // Turn 2: the method's strategy + response
+  const t2 = [
+    { label: `💭 Why ${label} chose this`, html: c.reasoning ? md(c.reasoning) : '' },
+    { label: '🧾 Raw output', html: c.raw_response ? `<pre class="raw">${formatRaw(c.raw_response)}</pre>` : '' },
+  ];
+  let v2 = '';
+  if (st === 'answer') {
+    const jc = md_.jClarify.map.get(id)?.generations;
+    v2 = verdictBlock(jc?.reason_direct, refFor(id), jc?.reason_direct_anyref);
+    t2.push({ label: '⚖️ Judge reasoning', html: judgeWhy(jc?.reason_direct, jc?.reason_direct_anyref) });
+  } else if (st === 'abstain') {
+    v2 = '<span class="verdict-line"><span class="pill v-none">⚖️ not judged</span></span>';
   }
+  h += msg({ role: 'asst', avatar: '🤖', name: label, turnN: 2, chip: chipFor(st), body: c.response, footer: foot(v2, t2) });
 
-  el.innerHTML = html || '<em style="color:#888">No baseline data</em>';
+  if (st === 'clarify') {
+    // Turn 3: simulated user, with the AmbigQA interpretation it was given
+    const u = md_.user.map.get(id)?.generations;
+    const disamb = D.base.disamb.map.get(id)?.context;
+    const intent = disamb?.disambiguated_question
+      ? `<div class="intent-note">🎯 <span class="tag">Has in mind</span><span class="dq">“${esc(disamb.disambiguated_question)}”</span><span class="ref">${esc((disamb.reference || []).join(' / '))}</span></div>`
+      : '';
+    h += msg({ role: 'user', avatar: '👤', name: 'Simulated user', turnN: 3, body: u?.response || '', under: intent,
+      footer: foot('', [{ label: '💭 User’s reasoning', html: u?.reasoning ? md(u.reasoning) : '' }]) });
+
+    // Turn 4: forced answer, or SAG+/BAG+ (which may still abstain)
+    const fg = md_.final.map.get(id)?.generations;
+    const jf = md_.jFinal.map.get(id);
+    let ftext = '', fchip = '', fst = null;
+    const t4 = [];
+    if (Array.isArray(fg)) ftext = fg[0] || '';
+    else if (fg && typeof fg === 'object') {
+      ftext = fg.response || '';
+      fst = norm(fg.strategy);
+      fchip = chipFor(fst);
+      t4.push({ label: `💭 Why ${t4name} chose this`, html: fg.reasoning ? md(fg.reasoning) : '' });
+      if (fg.raw_response) t4.push({ label: '🧾 Raw output', html: `<pre class="raw">${formatRaw(fg.raw_response)}</pre>` });
+    }
+    if (md_.fp === 'belief') {
+      const fb = md_.final.map.get(id)?.belief_state || [];
+      const cvf = md_.cvFinal.map.get(id)?.generations?.claim_variation;
+      if (fb.length) {
+        t4.push({ label: `🎲 Resampled belief state (${fb.length})`, html: `<div class="nested">${beliefBlock(
+          fb.map(x => typeof x === 'string' ? x : (x.raw_response || x.response || '')),
+          S.judgeOverlay ? (cvf?.claims || null) : null, null,
+          { overlay: S.judgeOverlay, caption: `Sampled after the clarification exchange${cvf && S.judgeOverlay ? ` · ${cvf.n_distinct_claims} judge claims` : ''}.` })}</div>` });
+      }
+    }
+    const ref = jf?.context?.final_ref;
+    const jfg = jf?.generations;
+    let v4 = verdictBlock(jfg?.final, Array.isArray(ref) ? ref.join(' / ') : ref, jfg?.final_anyref);
+    if (!v4 && fst === 'abstain') v4 = '<span class="verdict-line"><span class="pill v-none">⚖️ not judged</span></span>';
+    t4.push({ label: '⚖️ Judge reasoning', html: judgeWhy(jfg?.final, jfg?.final_anyref) });
+    h += msg({ role: 'asst', avatar: '🤖', name: t4name === 'baseline' ? `${label} · forced answer` : t4name, turnN: 4,
+      chip: fchip, body: ftext, footer: foot(v4, t4) });
+  }
+  el.innerHTML = head + `<div class="conv">${h}</div>`;
 }
 
-// Load the config from the link (or the default) right away so there's something to look at.
+function renderBaselines(id) {
+  const d = directRec(id);
+  const jd = D.base.jDirect.map.get(id);
+  const direct = d.generations?.answer?.[0]?.raw_response || d.generations?.answer?.[0]?.response || '';
+  let h = `<div class="sec-head"><h2>Baselines</h2><span class="sub">single answers with no strategy step</span></div><div class="base-grid">`;
+  h += `<div class="base"><h3>Direct generation</h3>
+    <div class="read">${md(direct) || '<span class="subtle">No output</span>'}</div>
+    ${foot(verdictBlock(jd?.generations?.direct, refFor(id), jd?.generations?.direct_anyref), [{ label: '⚖️ Judge reasoning', html: judgeWhy(jd?.generations?.direct, jd?.generations?.direct_anyref) }])}</div>`;
+  const dis = D.base.disamb.map.get(id);
+  if (dis?.context?.disambiguated_question) {
+    const jo = D.base.jDisamb.map.get(id);
+    const ref = jo?.context?.disambig_ref;
+    h += `<div class="base"><h3>Oracle: direct generation given the hidden disambiguation</h3>
+      <div class="intent-line"><span class="tag">🎯 Hidden disambiguation</span><span class="dq">“${esc(dis.context.disambiguated_question)}”</span></div>
+      <div class="read">${md(dis.generations?.answer?.[0] || '') || '<span class="subtle">No output</span>'}</div>
+      ${foot(verdictBlock(jo?.generations?.disambig, Array.isArray(ref) ? ref.join(' / ') : ref, jo?.generations?.disambig_anyref), [{ label: '⚖️ Judge reasoning', html: judgeWhy(jo?.generations?.disambig, jo?.generations?.disambig_anyref) }])}</div>`;
+  }
+  $('baselines').innerHTML = h + '</div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Navigation, URL, events
+// ─────────────────────────────────────────────────────────────────────────────
+function go(id) {
+  if (!id || id === S.cur) return;
+  S.cur = id;
+  renderRecord(); markCurrent();
+  window.scrollTo({ top: 0 });
+  closeRail();
+}
+function step(delta) {
+  const pos = S.filtered.indexOf(S.cur);
+  const next = S.filtered[pos < 0 ? 0 : pos + delta];
+  if (next) go(next);
+}
+async function setMethod(m) {
+  if (m === S.method) return;
+  S.method = m;
+  setStatus('Loading ' + METHOD_LABEL[m] + '…');
+  await ensureMethod(m);
+  setStatus('');
+  applyFilters(); renderList(); renderRecord();
+}
+async function setT4(t4) {
+  if (t4 === S.t4) return;
+  S.t4 = t4;
+  setStatus('Loading turn-4 outputs…');
+  await ensureMethod(S.method);
+  setStatus('');
+  applyFilters(); renderList(); renderRecord();
+  if (autoLoadOthers()) loadOthers(loadToken);
+}
+
+const URL_KEYS = ['model', 'method', 'turn4', 'user', 'judge', 'brevity', 'seed', 'split', 'id'];
+function applyUrlParams() {
+  if (EMBED) { S.pendingId = EMBED.defaultId || null; return; }
+  let p;
+  try { p = new URLSearchParams(location.search); } catch { return; }
+  const model = p.get('model'); if (MODELS.includes(model)) S.model = model;
+  const meth = p.get('method');
+  const mk = METHODS.find(m => m === meth || METHOD_LABEL[m] === meth); if (mk) S.method = mk;
+  const t4 = p.get('turn4'); if (t4) S.t4 = /\+|prompt1|belief/.test(t4) ? 'plus' : 'baseline';
+  const br = p.get('brevity'); const bk = Object.keys(BREVITY).find(k => k === br || BREVITY[k] === br); if (bk) S.brevity = bk;
+  const seed = p.get('seed'); if (SEEDS.includes(seed)) S.seed = seed;
+  const split = p.get('split'); if (SPLITS.includes(split)) S.split = split;
+  S.pendingId = p.get('id');
+}
+function updateUrl() {
+  if (EMBED) return;
+  try {
+    const p = new URLSearchParams({
+      model: S.model, method: METHOD_LABEL[S.method], turn4: t4Label(S.method, S.t4),
+      user: USER_MODEL, judge: JUDGE_MODEL, brevity: BREVITY[S.brevity], seed: S.seed, split: S.split,
+    });
+    if (S.cur) p.set('id', S.cur);
+    history.replaceState(null, '', '?' + p.toString());
+  } catch { /* sandboxed */ }
+}
+
+function fillSelect(sel, opts, val) {
+  sel.innerHTML = opts.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+  sel.value = val;
+}
+function initConfig() {
+  const lim = EMBED?.config;
+  fillSelect($('sel-model'), (lim ? [lim.model] : MODELS).map(m => [m, m]), S.model);
+  fillSelect($('sel-dp'), Object.entries(BREVITY).filter(([k]) => !lim || k === lim.brevity), S.brevity);
+  $('v-seed').textContent = S.seed;
+  $('v-split').textContent = S.split;
+  $('v-user').textContent = USER_MODEL;
+  $('v-judge').textContent = JUDGE_MODEL;
+  const onCfg = () => {
+    S.model = $('sel-model').value; S.brevity = $('sel-dp').value;
+    loadAll();
+  };
+  ['sel-model', 'sel-dp'].forEach(i => $(i).addEventListener('change', onCfg));
+}
+function setStatus(msg) { $('status').textContent = msg; syncCfgBtn(); }
+function syncCfgBtn() {
+  const b = $('cfg-btn');
+  if (b) b.textContent = `${S.model} · ${BREVITY[S.brevity]} ▾`;
+}
+
+function openRail() { document.body.classList.add('rail-open'); $('scrim').hidden = false; }
+function closeRail() { document.body.classList.remove('rail-open'); $('scrim').hidden = true; }
+
+function initEvents() {
+  $('list').addEventListener('click', e => { const r = e.target.closest('.row'); if (r) go(r.dataset.id); });
+  $('col').addEventListener('click', e => {
+    const t = e.target;
+    if (t.closest('#load-all')) { loadOthers(loadToken); renderCompare(); return; }
+    if (t.closest('#prev')) return step(-1);
+    if (t.closest('#next')) return step(1);
+    const cell = t.closest('.cell');
+    if (cell?.dataset.method) return setMethod(cell.dataset.method);
+    if (cell?.dataset.jump) return $(cell.dataset.jump).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const t4b = t.closest('[data-t4]'); if (t4b) return setT4(t4b.dataset.t4);
+    const xb = t.closest('.xbtn');
+    if (xb) {
+      const panel = $(xb.dataset.xt);
+      if (panel) { panel.hidden = !panel.hidden; xb.setAttribute('aria-expanded', String(!panel.hidden)); }
+      return;
+    }
+    if (t.closest('[data-overlay]')) {
+      S.judgeOverlay = !S.judgeOverlay;
+      try { localStorage.setItem('bagExplorerJudgeOverlay', S.judgeOverlay ? '1' : '0'); } catch { }
+      renderBelief(S.cur); renderConversation(S.cur); renderList();
+      return;
+    }
+    const bb = t.closest('.bb');
+    if (bb) {
+      const c = t.closest('.seg-s, .lg');
+      if (c) return bbSetActive(bb, c.dataset.c);
+      if (t.closest('.bb-toggle')) {
+        const open = bb.querySelector('.samples').hidden;
+        bbOpen(bb, open);
+        if (bb.id === 'bb-main') S.samplesOpen = open;
+        return;
+      }
+      const body = t.closest('.sample-body');
+      if (body && !window.getSelection()?.toString()) body.classList.toggle('open');
+    }
+    if (t.closest('#copy-link')) {
+      const btn = $('copy-link');
+      navigator.clipboard?.writeText(location.href).then(() => { btn.textContent = 'Link copied'; setTimeout(() => btn.textContent = 'Copy link', 1500); }).catch(() => {});
+    }
+  });
+  const fset = (key, val) => { S.f[key] = val; applyFilters(); renderList(); renderRecordNavOnly(); };
+  $('f-q').addEventListener('input', e => fset('q', e.target.value));
+  $('f-strategy').addEventListener('change', e => fset('strategy', e.target.value));
+  $('f-outcome').addEventListener('change', e => fset('outcome', e.target.value));
+  $('f-amb').addEventListener('change', e => fset('amb', e.target.value));
+  $('f-claims').addEventListener('change', e => fset('claims', e.target.value));
+  $('f-disagree').addEventListener('change', e => {
+    if (e.target.checked && METHODS.some(m => !D.meth[methKey(m)])) { loadOthers(loadToken); renderCompare(); }
+    fset('disagree', e.target.checked);
+  });
+  $('f-reset').addEventListener('click', () => {
+    S.f = { q: '', strategy: '', outcome: '', amb: '', claims: '', disagree: false };
+    $('f-q').value = ''; ['f-strategy', 'f-outcome', 'f-amb', 'f-claims'].forEach(i => $(i).value = ''); $('f-disagree').checked = false;
+    applyFilters(); renderList(); renderRecordNavOnly();
+  });
+  $('browse-btn').addEventListener('click', openRail);
+  $('cfg-btn').addEventListener('click', () => {
+    const open = document.body.classList.toggle('cfg-open');
+    $('cfg-btn').setAttribute('aria-expanded', open); syncTopH();
+  });
+  $('scrim').addEventListener('click', closeRail);
+  document.addEventListener('keydown', e => {
+    if (e.target.matches('input, select, textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'ArrowLeft' || e.key === 'k') step(-1);
+    else if (e.key === 'ArrowRight' || e.key === 'j') step(1);
+    else if (e.key === '/') { e.preventDefault(); openRail(); $('f-q').focus(); }
+    else if (e.key === 'Escape') closeRail();
+  });
+  const KEY = 'bagExplorerAboutSeen';
+  const about = $('about');
+  let seen = false;
+  try { seen = localStorage.getItem(KEY) === '1'; } catch { /* storage blocked */ }
+  if (!seen && window.innerWidth > 700) about.hidden = false;
+  const closeAbout = () => { about.hidden = true; try { localStorage.setItem(KEY, '1'); } catch { } syncTopH(); };
+  $('about-close').addEventListener('click', closeAbout);
+  $('about-btn').addEventListener('click', () => { about.hidden = !about.hidden; if (about.hidden) closeAbout(); syncTopH(); });
+}
+// Filtering changes the position counter but not the record itself.
+function renderRecordNavOnly() {
+  if (!S.cur) return;
+  if (!S.filtered.includes(S.cur) && S.filtered.length) { S.cur = S.filtered[0]; renderRecord(); markCurrent(); return; }
+  renderRecord();
+}
+// Theme: System (follows OS / host app) → Light → Dark; remembered per browser.
+const THEME_KEY = 'bagExplorerTheme';
+function applyTheme(t) {
+  const root = document.documentElement;
+  if (t === 'light' || t === 'dark') root.dataset.theme = t; else delete root.dataset.theme;
+  $('theme-btn').textContent = 'Theme: ' + ({ light: 'Light', dark: 'Dark' }[t] || 'System');
+}
+function initTheme() {
+  let t = 'system';
+  try { t = localStorage.getItem(THEME_KEY) || 'system'; } catch { /* storage blocked */ }
+  if (t !== 'system') applyTheme(t);
+  try { S.judgeOverlay = localStorage.getItem('bagExplorerJudgeOverlay') !== '0'; } catch { }
+  $('theme-btn').addEventListener('click', () => {
+    const cur = document.documentElement.dataset.theme || 'system';
+    const next = { system: 'light', light: 'dark', dark: 'system' }[cur] || 'system';
+    applyTheme(next);
+    try { if (next === 'system') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, next); } catch { }
+  });
+}
+function syncTopH() {
+  document.documentElement.style.setProperty('--top-h', $('top').offsetHeight + 'px');
+}
+
 applyUrlParams();
-loadData();
-
-// ── Utility ───────────────────────────────────────────────────────────────
-function setStatus(msg) {
-  document.getElementById('status').textContent = msg;
-}
+initTheme();
+initConfig();
+initEvents();
+syncTopH();
+window.addEventListener('resize', syncTopH);
+loadAll();
 </script>
+
 </body>
 </html>
